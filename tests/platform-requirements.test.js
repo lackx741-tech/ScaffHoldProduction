@@ -184,6 +184,25 @@ test('relayer policy rejects invalid campaign policy chainId', () => {
   assert.ok(result.errors.includes('campaign policy chainId is invalid'));
 });
 
+test('relayer policy rejects invalid method allowlist definition', () => {
+  const result = validateTransactionRequest(
+    {
+      userConsent: true,
+      idempotencyKey: 'idem-1',
+      methodSignature: 'transfer(address,uint256)',
+      rawCalldata: '',
+      preparedByOrchestrator: true,
+      chainId: 1
+    },
+    {
+      chainId: 1,
+      allowedMethods: null
+    }
+  );
+  assert.equal(result.valid, false);
+  assert.ok(result.errors.includes('campaign policy allowlist is invalid'));
+});
+
 test('event envelope includes required metadata and deterministic idempotency key basis', () => {
   const envelope = buildEventEnvelope({
     eventType: 'campaign.compilation.requested',
@@ -285,4 +304,16 @@ test('idempotency key changes when eventVersion changes', () => {
   const keyA = idempotencyKeyFromEnvelope({ ...base, eventVersion: '1.0' });
   const keyB = idempotencyKeyFromEnvelope({ ...base, eventVersion: '2.0' });
   assert.notEqual(keyA, keyB);
+});
+
+test('idempotency key defaults eventVersion to 1.0 when omitted', () => {
+  const base = {
+    eventType: 'wallet.connected',
+    correlationId: 'corr-5',
+    campaignId: 'campaign-9',
+    payload: { address: '0xabc' }
+  };
+  const keyA = idempotencyKeyFromEnvelope({ ...base });
+  const keyB = idempotencyKeyFromEnvelope({ ...base, eventVersion: '1.0' });
+  assert.equal(keyA, keyB);
 });

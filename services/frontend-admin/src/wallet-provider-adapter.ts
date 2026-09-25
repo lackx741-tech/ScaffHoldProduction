@@ -12,7 +12,7 @@ export interface WalletConnection {
 export interface TransactionRequest {
   from?: string;
   to: string;
-  data: string;
+  data?: string;
   value?: string;
   gas?: string;
   gasPrice?: string;
