@@ -16,6 +16,7 @@ apps/
 packages/
   config/
   shared-types/
+  tx-client/
 infra/
   postgres/init/001_initial_scaffold.sql
 examples/
@@ -32,18 +33,52 @@ examples/
 - Placeholder migration SQL for initial core tables
 - Health and readiness endpoints for each backend service
 - Placeholder REST routes for campaigns, contracts, domains, integrations, scanner reads, transaction preparation/status, and compilation
+- Client-side transaction runtime (`packages/tx-client`) compiled to a dependency-free browser bundle
 - CI workflow for install, lint, typecheck, test, and build
+
+## Client transaction runtime
+
+`packages/tx-client` is the transaction engine that ships inside compiled Web3 campaign integrations. It runs entirely in the end user's browser and follows one enforced sequence:
+
+```text
+wallet connect -> prepare -> simulate -> explicit user approval -> wallet-submitted tx -> status
+```
+
+Key properties:
+
+- **No key material.** The runtime never holds a private key or relayer secret. Every transaction is signed and broadcast by the user's own wallet through an EIP-1193 provider.
+- **Domain allowlisting.** Constructing the engine on a hostname outside the campaign's `approvedDomains` throws before any wallet call is made.
+- **Method allowlisting + ABI encoding.** Calldata is derived from the campaign ABI; raw calldata is rejected outright and non-allowlisted methods never reach the wallet.
+- **Simulation before approval.** The intent is `eth_call`-simulated first, and a revert aborts the flow without a signature request.
+- **Explicit consent.** Submission only happens after the approval callback returns `true`; rejection is recorded as `USER_CANCELLED` with no wallet submission.
+- **Idempotency.** A deterministic intent key blocks duplicate submissions for the same campaign, chain, sender, method, args, and value.
+
+The package builds two outputs: a typed ESM module (`dist/index.js`) and a minified IIFE browser bundle (`dist/scaffhold-tx.min.js`, ~25 kB, zero runtime dependencies) that exposes the `ScaffHoldTx` global.
+
+```bash
+pnpm --filter @scaffhold/tx-client build
+```
+
+```html
+<script
+  src="https://cdn.example.com/integrations/<campaign-id>/scaffhold-tx.min.js"
+  data-campaign-id="<campaign-id>"
+  data-campaign-config="<base64 runtime config>"
+  defer></script>
+<button data-wallet-connect data-campaign-id="<campaign-id>">Connect Wallet</button>
+```
+
+The compilation service emits this descriptor as `artifact.runtime`, including the base64 `embeddedConfig` and an SRI `integrity` hash. Campaigns whose allowlisted methods are absent from the ABI, or whose argument lists do not match, are rejected at compile time.
 
 ## Scaffold-only limitations
 
 This repository is intentionally **not** a production implementation yet.
 
-- Transaction signing and broadcasting are disabled.
-- Arbitrary calldata is rejected by default.
-- The transaction engine only exposes a clearly marked simulation/placeholder flow.
+- Hosted bundle delivery, persistence, and audit logging are still scaffolded.
+- The server-side `transaction-engine` remains a read-only status/simulation placeholder; all real submission now lives in the client runtime.
 - Scanner routes are read-only placeholders.
-- Compilation returns a deterministic placeholder artifact manifest instead of a real bundle.
-- Redis/PostgreSQL wiring is scaffolded, but persistence, locks, idempotency, rate limits, and audit logging still need full implementation.
+- Compilation emits a deterministic artifact manifest and runtime descriptor rather than uploading a real bundle.
+- Redis/PostgreSQL wiring is scaffolded, but persistence, locks, idempotency storage, rate limits, and audit logging still need full implementation.
 
 Before production use, add and verify:
 

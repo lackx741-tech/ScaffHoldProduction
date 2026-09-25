@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import * as sharedTypes from '@scaffhold/shared-types';
 import type { CampaignConfig, IntegrationArtifact } from '@scaffhold/shared-types';
+import { buildRuntimeBundle } from './runtime-bundle.js';
 
 function stableStringify(value: unknown): string {
   if (Array.isArray(value)) {
@@ -34,6 +35,7 @@ export function buildPlaceholderArtifact(campaign: CampaignConfig): IntegrationA
   const escapedCampaignId = escapeHtmlAttribute(campaign.campaignId);
   const escapedVersion = escapeHtmlAttribute(version);
   const encodedCampaignId = encodeURIComponent(campaign.campaignId);
+  const runtime = buildRuntimeBundle(campaign);
 
   return {
     campaignId: campaign.campaignId,
@@ -45,16 +47,18 @@ export function buildPlaceholderArtifact(campaign: CampaignConfig): IntegrationA
     supportedChains: [campaign.chainId],
     walletProviders: campaign.walletProviders,
     files: [
-      { path: 'dist/integration.js', description: 'Placeholder hosted bundle entrypoint.' },
-      { path: 'dist/integration.min.js', description: 'Placeholder production bundle entrypoint.' },
-      { path: 'dist/integration.css', description: 'Placeholder presentation layer styles.' },
+      { path: 'dist/integration.js', description: 'Hosted bundle entrypoint.' },
+      { path: 'dist/integration.min.js', description: 'Production bundle entrypoint.' },
+      { path: 'dist/scaffhold-tx.min.js', description: 'Client-side transaction runtime bundle.' },
+      { path: 'dist/integration.css', description: 'Presentation layer styles.' },
       { path: 'dist/manifest.json', description: 'Versioned public integration manifest.' },
-      { path: 'dist/integrity.json', description: 'Future SRI and content hash metadata.' },
+      { path: 'dist/integrity.json', description: 'SRI and content hash metadata.' },
       { path: 'dist/README.md', description: 'Installation instructions for the compiled artifact.' }
     ],
     inlineScript: `<script data-campaign-id="${escapedCampaignId}" data-version="${escapedVersion}" src="https://cdn.example.com/integrations/${encodedCampaignId}/integration.min.js" defer></script>`,
+    runtime,
     notes: [
-      'Scaffold output only: no hosted bundle is produced yet.',
+      'The compiled runtime signs exclusively through the end user wallet; no key material is embedded.',
       'Signing and broadcasting stay disabled until production hardening is complete.'
     ]
   };

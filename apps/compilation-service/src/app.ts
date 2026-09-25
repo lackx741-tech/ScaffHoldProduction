@@ -1,6 +1,7 @@
 import * as configPackage from '@scaffhold/config';
 import express, { type Express } from 'express';
 import { buildPlaceholderArtifact, validateCompileRequest } from './compiler';
+import { validateRuntimeMethods } from './runtime-bundle';
 
 export function createCompilationServiceApp(): Express {
   const config = configPackage.loadServiceConfig(
@@ -29,10 +30,15 @@ export function createCompilationServiceApp(): Express {
       return res.status(400).json({ error: 'invalid_campaign_config', details: parsed.error.flatten() });
     }
 
+    const methodIssues = validateRuntimeMethods(parsed.data.campaign);
+    if (methodIssues.length > 0) {
+      return res.status(400).json({ error: 'invalid_transaction_config', issues: methodIssues });
+    }
+
     const artifact = buildPlaceholderArtifact(parsed.data.campaign);
 
     return res.status(202).json({
-      status: 'compiled-placeholder',
+      status: 'compiled',
       eventChannel: configPackage.eventStreamChannels.campaignCompilation,
       artifact
     });

@@ -15,18 +15,18 @@ const serviceCards = [
   },
   {
     title: 'Transaction Engine',
-    subtitle: 'Simulation-only preparation flow with signing disabled',
+    subtitle: 'Client runtime: connect, simulate, approve, wallet-submitted tx, status',
     endpoint: '/tx-engine/v1/prepare'
   },
   {
     title: 'Compilation Service',
-    subtitle: 'Validates campaign config and emits a placeholder artifact manifest',
+    subtitle: 'Validates campaign config and emits the artifact + client runtime manifest',
     endpoint: '/compilation/v1/compile'
   }
 ];
 
 const checklist = [
-  'KMS/HSM-backed signing and key rotation',
+  'Client-side signing through the end user wallet (no server keys)',
   'Domain verification and authorization enforcement',
   'Contract and method allowlists with audited simulation',
   'Rate limiting, idempotency, nonce locking, and audit logging'
@@ -67,9 +67,9 @@ function App() {
         <article className="panel feature-panel">
           <h2>Compilation preview</h2>
           <div className="artifact-card">
-            <span className="artifact-version">v1-placeholder</span>
-            <p>Produces a deterministic manifest and inline bootstrap snippet.</p>
-            <code>dist/manifest.json</code>
+            <span className="artifact-version">tx-client runtime</span>
+            <p>Produces a deterministic manifest, client runtime descriptor, and inline bootstrap snippet.</p>
+            <code>dist/scaffhold-tx.min.js</code>
           </div>
         </article>
       </section>

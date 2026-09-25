@@ -29,7 +29,7 @@
     "transactionPolicy": {
       "userConsentRequired": true,
       "relayerEnabled": false,
-      "signingMode": "disabled"
+      "signingMode": "client-wallet"
     }
   }
 }

@@ -38,7 +38,7 @@ export const campaignConfigSchema = z.object({
   transactionPolicy: z.object({
     userConsentRequired: z.literal(true),
     relayerEnabled: z.boolean(),
-    signingMode: z.literal('disabled')
+    signingMode: z.enum(['disabled', 'client-wallet'])
   })
 });
 
@@ -47,6 +47,43 @@ export type CampaignConfig = z.infer<typeof campaignConfigSchema>;
 export const compileCampaignRequestSchema = z.object({
   campaign: campaignConfigSchema
 });
+
+/**
+ * Public configuration embedded into the compiled client runtime. It must never
+ * carry signing secrets: the browser signs locally through the user's wallet.
+ */
+export const runtimeConfigSchema = z.object({
+  campaignId: z.string().min(1),
+  name: z.string().min(1),
+  environment: z.enum(['development', 'staging', 'production']),
+  chainId: z.number().int().positive(),
+  contract: z.object({
+    address: evmAddressSchema,
+    abi: z.array(contractAbiItemSchema).min(1),
+    allowedMethods: z.array(z.string().min(1)).min(1)
+  }),
+  approvedDomains: z.array(z.string().min(1)).min(1),
+  walletProviders: z.array(walletProviderSchema).min(1),
+  transactionPolicy: z.object({
+    userConsentRequired: z.literal(true),
+    relayerEnabled: z.boolean(),
+    signingMode: z.literal('client-wallet')
+  }),
+  confirmationsRequired: z.number().int().nonnegative().optional()
+});
+
+export type RuntimeConfig = z.infer<typeof runtimeConfigSchema>;
+
+export const runtimeBundleSchema = z.object({
+  runtimeVersion: z.string().min(1),
+  entrypoint: z.string().min(1),
+  /** Base64-encoded runtime config for the script's data-campaign-config attribute. */
+  embeddedConfig: z.string().min(1),
+  integrity: z.string().min(1),
+  bootstrapScript: z.string().min(1)
+});
+
+export type RuntimeBundle = z.infer<typeof runtimeBundleSchema>;
 
 export const integrationArtifactSchema = z.object({
   campaignId: z.string(),
@@ -64,7 +101,8 @@ export const integrationArtifactSchema = z.object({
     })
   ),
   inlineScript: z.string(),
-  notes: z.array(z.string())
+  notes: z.array(z.string()),
+  runtime: runtimeBundleSchema.optional()
 });
 
 export type IntegrationArtifact = z.infer<typeof integrationArtifactSchema>;

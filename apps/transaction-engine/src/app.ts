@@ -78,10 +78,15 @@ export function createTransactionEngineApp(): Express {
 
     return res.status(202).json({
       status: 'REQUESTED',
-      mode: 'simulation-only',
-      signing: 'disabled',
-      broadcasting: 'disabled',
+      mode: 'client-runtime',
+      signing: 'client-wallet',
+      broadcasting: 'client-wallet',
       transactionId: `tx_${validation.data.idempotencyKey}`,
+      runtime: {
+        package: '@scaffhold/tx-client',
+        entrypoint: 'scaffhold-tx.min.js',
+        flow: ['wallet.connect', 'prepare', 'simulate', 'approve', 'send', 'status']
+      },
       redis: {
         lockKey: configPackage.redisKeys.lock('nonce', validation.data.campaignId),
         idempotencyKey: configPackage.redisKeys.idempotency(validation.data.idempotencyKey)
@@ -100,16 +105,19 @@ export function createTransactionEngineApp(): Express {
       status: 'SIMULATED',
       simulationResult: 'placeholder-success',
       gasEstimate: '21000',
-      notes: ['Simulation is stubbed and does not sign, submit, or broadcast any transaction.']
+      notes: [
+        'Server-side simulation is stubbed; the client runtime performs eth_call simulation before requesting approval.',
+        'Neither path signs or broadcasts on the server.'
+      ]
     });
   });
 
   app.get('/tx-engine/v1/transactions/:transactionId', (req, res) => {
     res.json({
       transactionId: req.params.transactionId,
-      status: 'DISABLED',
+      status: 'CLIENT_MANAGED',
       message:
-        'Broadcasting remains disabled until KMS/HSM, allowlists, audit logging, and simulation enforcement are implemented.'
+        'Submission is owned by the client-side transaction runtime and signed by the end user wallet. Server-side status persistence awaits the audit-log and idempotency store.'
     });
   });
 
