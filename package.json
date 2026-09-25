@@ -7,12 +7,12 @@
     "node": ">=22.12.0"
   },
   "scripts": {
-    "build": "pnpm -r build",
+    "build": "pnpm --filter @scaffhold/shared-types build && pnpm --filter @scaffhold/config build && pnpm --filter admin-dashboard build && pnpm --filter orchestrator-api build && pnpm --filter scanner-service build && pnpm --filter transaction-engine build && pnpm --filter compilation-service build",
     "build:packages": "pnpm --filter @scaffhold/shared-types build && pnpm --filter @scaffhold/config build",
     "dev": "pnpm run build:packages && concurrently -k -n dashboard,orchestrator,scanner,tx-engine,compiler \"pnpm --filter admin-dashboard exec vite --host 0.0.0.0 --port 5173\" \"pnpm --filter orchestrator-api dev\" \"pnpm --filter scanner-service dev\" \"pnpm --filter transaction-engine dev\" \"pnpm --filter compilation-service dev\"",
-    "lint": "pnpm -r lint && pnpm exec eslint tests --ext .ts",
+    "lint": "pnpm --filter @scaffhold/shared-types lint && pnpm --filter @scaffhold/config lint && pnpm --filter admin-dashboard lint && pnpm --filter orchestrator-api lint && pnpm --filter scanner-service lint && pnpm --filter transaction-engine lint && pnpm --filter compilation-service lint && pnpm exec eslint tests --ext .ts",
     "test": "pnpm run build:packages && pnpm exec vitest run",
-    "typecheck": "pnpm run build:packages && pnpm -r typecheck"
+    "typecheck": "pnpm run build:packages && pnpm --filter @scaffhold/shared-types typecheck && pnpm --filter @scaffhold/config typecheck && pnpm --filter admin-dashboard typecheck && pnpm --filter orchestrator-api typecheck && pnpm --filter scanner-service typecheck && pnpm --filter transaction-engine typecheck && pnpm --filter compilation-service typecheck"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

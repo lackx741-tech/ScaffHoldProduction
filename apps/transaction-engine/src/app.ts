@@ -2,6 +2,53 @@ import * as configPackage from '@scaffhold/config';
 import * as sharedTypes from '@scaffhold/shared-types';
 import express, { type Express } from 'express';
 
+function validateTransactionPolicy(payload: unknown) {
+  const parsed = sharedTypes.transactionPreparationRequestSchema.safeParse(payload);
+
+  if (!parsed.success) {
+    return {
+      ok: false as const,
+      status: 400,
+      body: { error: 'invalid_request', details: parsed.error.flatten() }
+    };
+  }
+
+  if (parsed.data.calldata) {
+    return {
+      ok: false as const,
+      status: 400,
+      body: {
+        error: 'arbitrary_calldata_rejected',
+        message: 'The scaffold rejects arbitrary calldata by default.'
+      }
+    };
+  }
+
+  if (!parsed.data.allowlisted) {
+    return {
+      ok: false as const,
+      status: 403,
+      body: {
+        error: 'method_not_allowlisted',
+        message: 'Only explicitly allowlisted methods may enter the placeholder flow.'
+      }
+    };
+  }
+
+  if (!parsed.data.userConsentConfirmed) {
+    return {
+      ok: false as const,
+      status: 400,
+      body: {
+        error: 'missing_user_consent',
+        message: 'User consent must be recorded before any transaction preparation.'
+      }
+    };
+  }
+
+  return { ok: true as const, data: parsed.data };
+}
+
 export function createTransactionEngineApp(): Express {
   const config = configPackage.loadServiceConfig(
     'transaction-engine',
@@ -24,30 +71,9 @@ export function createTransactionEngineApp(): Express {
   });
 
   app.post('/tx-engine/v1/prepare', (req, res) => {
-    const parsed = sharedTypes.transactionPreparationRequestSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: 'invalid_request', details: parsed.error.flatten() });
-    }
-
-    if (parsed.data.calldata) {
-      return res.status(400).json({
-        error: 'arbitrary_calldata_rejected',
-        message: 'The scaffold rejects arbitrary calldata by default.'
-      });
-    }
-
-    if (!parsed.data.allowlisted) {
-      return res.status(403).json({
-        error: 'method_not_allowlisted',
-        message: 'Only explicitly allowlisted methods may enter the placeholder flow.'
-      });
-    }
-
-    if (!parsed.data.userConsentConfirmed) {
-      return res.status(400).json({
-        error: 'missing_user_consent',
-        message: 'User consent must be recorded before any transaction preparation.'
-      });
+    const validation = validateTransactionPolicy(req.body);
+    if (!validation.ok) {
+      return res.status(validation.status).json(validation.body);
     }
 
     return res.status(202).json({
@@ -55,19 +81,19 @@ export function createTransactionEngineApp(): Express {
       mode: 'simulation-only',
       signing: 'disabled',
       broadcasting: 'disabled',
-      transactionId: `tx_${parsed.data.idempotencyKey}`,
+      transactionId: `tx_${validation.data.idempotencyKey}`,
       redis: {
-        lockKey: configPackage.redisKeys.lock('nonce', parsed.data.campaignId),
-        idempotencyKey: configPackage.redisKeys.idempotency(parsed.data.idempotencyKey)
+        lockKey: configPackage.redisKeys.lock('nonce', validation.data.campaignId),
+        idempotencyKey: configPackage.redisKeys.idempotency(validation.data.idempotencyKey)
       },
       todos: configPackage.transactionEngineProductionTodos
     });
   });
 
   app.post('/tx-engine/v1/simulate', (req, res) => {
-    const parsed = sharedTypes.transactionPreparationRequestSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: 'invalid_request', details: parsed.error.flatten() });
+    const validation = validateTransactionPolicy(req.body);
+    if (!validation.ok) {
+      return res.status(validation.status).json(validation.body);
     }
 
     return res.json({
@@ -82,7 +108,8 @@ export function createTransactionEngineApp(): Express {
     res.json({
       transactionId: req.params.transactionId,
       status: 'DISABLED',
-      message: 'Broadcasting remains disabled until KMS/HSM, allowlists, audit logging, and simulation enforcement are implemented.'
+      message:
+        'Broadcasting remains disabled until KMS/HSM, allowlists, audit logging, and simulation enforcement are implemented.'
     });
   });
 

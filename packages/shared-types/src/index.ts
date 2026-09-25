@@ -91,6 +91,9 @@ export const platformEventTypeSchema = z.enum([
   'wallet.disconnected',
   'transaction.requested',
   'transaction.simulated',
+  'transaction.submitted',
+  'transaction.confirmed',
+  'transaction.failed',
   'transaction.status.updated',
   'transaction.rejected'
 ]);

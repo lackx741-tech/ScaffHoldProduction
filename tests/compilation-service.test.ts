@@ -2,6 +2,7 @@ import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { createCompilationServiceApp } from '../apps/compilation-service/src/app';
 import { buildPlaceholderArtifact } from '../apps/compilation-service/src/compiler';
+import { createTransactionEngineApp } from '../apps/transaction-engine/src/app';
 
 const sampleCampaign = {
   campaignId: 'cmp_launch_alpha',
@@ -64,5 +65,22 @@ describe('compilation scaffold', () => {
 
     expect(response.status).toBe(400);
     expect(response.body.error).toBe('invalid_campaign_config');
+  });
+
+  it('applies the same transaction safety checks to simulate requests', async () => {
+    const app = createTransactionEngineApp();
+    const response = await request(app).post('/tx-engine/v1/simulate').send({
+      campaignId: sampleCampaign.campaignId,
+      chainId: sampleCampaign.chainId,
+      contractAddress: sampleCampaign.contract.address,
+      methodSignature: 'mint(uint256)',
+      allowlisted: false,
+      userConsentConfirmed: true,
+      idempotencyKey: 'demo',
+      calldata: '0xdeadbeef'
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('arbitrary_calldata_rejected');
   });
 });

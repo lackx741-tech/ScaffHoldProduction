@@ -57,3 +57,8 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   metadata JSONB NOT NULL DEFAULT '{}'::JSONB,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE INDEX IF NOT EXISTS idx_contracts_campaign_id ON contracts (campaign_id);
+CREATE INDEX IF NOT EXISTS idx_domains_campaign_id ON domains (campaign_id);
+CREATE INDEX IF NOT EXISTS idx_integrations_campaign_id ON integrations (campaign_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_campaign_id ON transactions (campaign_id);
