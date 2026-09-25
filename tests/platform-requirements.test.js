@@ -27,6 +27,21 @@ test('compile request blocks obvious secret markers in generated script', () => 
   assert.ok(result.errors.includes('integration script contains forbidden secret markers'));
 });
 
+test('compile request blocks generic SECRET markers in generated script', () => {
+  const result = validateCompileRequest({
+    campaignId: 'c1',
+    chainId: 1,
+    contractAddress: '0x0000000000000000000000000000000000000001',
+    abi: [],
+    walletProviders: ['walletconnect'],
+    approvedDomains: ['example.com'],
+    integrationScript: 'const APP_SECRET = \"x\";'
+  });
+
+  assert.equal(result.valid, false);
+  assert.ok(result.errors.includes('integration script contains forbidden secret markers'));
+});
+
 test('relayer policy enforces consent, allowlist and anti-arbitrary-calldata protections', () => {
   const campaignPolicy = {
     chainId: 1,
@@ -71,4 +86,7 @@ test('event envelope includes required metadata and deterministic idempotency ke
   const keyA = idempotencyKeyFromEnvelope(envelope);
   const keyB = idempotencyKeyFromEnvelope({ ...envelope, eventId: 'different', timestamp: 'different' });
   assert.equal(keyA, keyB);
+
+  const keyC = idempotencyKeyFromEnvelope({ ...envelope, payload: { status: 'complete' } });
+  assert.notEqual(keyA, keyC);
 });

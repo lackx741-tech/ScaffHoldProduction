@@ -29,6 +29,7 @@ export function buildEventEnvelope({
 }
 
 export function idempotencyKeyFromEnvelope(envelope) {
-  const basis = `${envelope.eventType}:${envelope.eventVersion}:${envelope.correlationId}:${envelope.campaignId}`;
+  const payloadBasis = JSON.stringify(envelope.payload ?? {});
+  const basis = `${envelope.eventType}:${envelope.eventVersion}:${envelope.correlationId}:${envelope.campaignId}:${payloadBasis}`;
   return crypto.createHash('sha256').update(basis).digest('hex');
 }
