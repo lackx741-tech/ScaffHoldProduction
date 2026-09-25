@@ -1,5 +1,7 @@
 export function validateTransactionRequest(request, campaignPolicy) {
   const errors = [];
+  const requestChainId = Number(request.chainId);
+  const policyChainId = Number(campaignPolicy.chainId);
 
   if (!request.userConsent) {
     errors.push('explicit user consent is required');
@@ -18,7 +20,7 @@ export function validateTransactionRequest(request, campaignPolicy) {
     errors.push('arbitrary raw calldata from browser is not accepted');
   }
 
-  if (request.chainId !== campaignPolicy.chainId) {
+  if (!Number.isInteger(requestChainId) || requestChainId !== policyChainId) {
     errors.push('chainId does not match campaign policy');
   }
 

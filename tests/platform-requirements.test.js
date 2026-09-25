@@ -78,6 +78,20 @@ test('compile request blocks generic SECRET markers in generated script', () => 
   assert.ok(result.errors.includes('integration script contains forbidden secret markers'));
 });
 
+test('compile request blocks mixed-case private_key marker', () => {
+  const result = validateCompileRequest({
+    campaignId: 'c1',
+    chainId: 1,
+    contractAddress: '0x0000000000000000000000000000000000000001',
+    abi: [],
+    walletProviders: ['walletconnect'],
+    approvedDomains: ['example.com'],
+    integrationScript: 'const Private_Key = \"x\";'
+  });
+  assert.equal(result.valid, false);
+  assert.ok(result.errors.includes('integration script contains forbidden secret markers'));
+});
+
 test('relayer policy enforces consent, allowlist and anti-arbitrary-calldata protections', () => {
   const campaignPolicy = {
     chainId: 1,
@@ -102,6 +116,27 @@ test('relayer policy enforces consent, allowlist and anti-arbitrary-calldata pro
   assert.ok(invalid.errors.includes('method signature is not allowlisted for this campaign'));
   assert.ok(invalid.errors.includes('arbitrary raw calldata from browser is not accepted'));
   assert.ok(invalid.errors.includes('chainId does not match campaign policy'));
+});
+
+test('relayer policy accepts numeric-string chainId equivalent to campaign chain', () => {
+  const campaignPolicy = {
+    chainId: 1,
+    allowedMethods: ['transfer(address,uint256)']
+  };
+
+  const result = validateTransactionRequest(
+    {
+      userConsent: true,
+      idempotencyKey: 'idem-1',
+      methodSignature: 'transfer(address,uint256)',
+      rawCalldata: '',
+      preparedByOrchestrator: true,
+      chainId: '1'
+    },
+    campaignPolicy
+  );
+
+  assert.equal(result.valid, true);
 });
 
 test('event envelope includes required metadata and deterministic idempotency key basis', () => {

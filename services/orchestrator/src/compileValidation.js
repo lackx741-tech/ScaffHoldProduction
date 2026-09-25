@@ -34,7 +34,8 @@ export function validateCompileRequest(request) {
     errors.push('allowedMethods entries must include signature and executionType');
   }
 
-  if (request.integrationScript?.includes('PRIVATE_KEY') || request.integrationScript?.includes('SECRET')) {
+  const script = request.integrationScript?.toLowerCase() ?? '';
+  if (script.includes('private_key') || script.includes('secret')) {
     errors.push('integration script contains forbidden secret markers');
   }
 
