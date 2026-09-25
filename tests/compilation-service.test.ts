@@ -41,6 +41,7 @@ describe('compilation scaffold', () => {
     expect(first).toEqual(second);
     expect(first.version).toMatch(/^v1-/);
     expect(first.inlineScript).toContain(sampleCampaign.campaignId);
+    expect(first.inlineScript).toContain(`data-version="${first.version}"`);
   });
 
   it('validates and returns a placeholder compilation response', async () => {

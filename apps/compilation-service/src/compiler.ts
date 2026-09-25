@@ -18,10 +18,22 @@ function stableStringify(value: unknown): string {
   return JSON.stringify(value);
 }
 
+function escapeHtmlAttribute(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+}
+
 export function buildPlaceholderArtifact(campaign: CampaignConfig): IntegrationArtifact {
   const serialized = stableStringify(campaign);
   const bundleHash = createHash('sha256').update(serialized).digest('hex');
   const version = `v1-${bundleHash.slice(0, 8)}`;
+  const escapedCampaignId = escapeHtmlAttribute(campaign.campaignId);
+  const escapedVersion = escapeHtmlAttribute(version);
+  const encodedCampaignId = encodeURIComponent(campaign.campaignId);
 
   return {
     campaignId: campaign.campaignId,
@@ -40,7 +52,7 @@ export function buildPlaceholderArtifact(campaign: CampaignConfig): IntegrationA
       { path: 'dist/integrity.json', description: 'Future SRI and content hash metadata.' },
       { path: 'dist/README.md', description: 'Installation instructions for the compiled artifact.' }
     ],
-    inlineScript: `<script data-campaign-id="${campaign.campaignId}" data-version="${version}" src="https://cdn.example.com/integrations/${campaign.campaignId}/integration.min.js" defer></script>`,
+    inlineScript: `<script data-campaign-id="${escapedCampaignId}" data-version="${escapedVersion}" src="https://cdn.example.com/integrations/${encodedCampaignId}/integration.min.js" defer></script>`,
     notes: [
       'Scaffold output only: no hosted bundle is produced yet.',
       'Signing and broadcasting stay disabled until production hardening is complete.'

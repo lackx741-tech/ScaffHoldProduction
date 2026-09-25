@@ -1,3 +1,6 @@
+-- Reduced scaffold schema: this intentionally bootstraps only the minimum
+-- campaign-related columns needed for the local foundation and does not yet
+-- mirror every field from the longer product specification.
 CREATE TABLE IF NOT EXISTS campaigns (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
