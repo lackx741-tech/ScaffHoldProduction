@@ -75,7 +75,7 @@ describe('compilation scaffold', () => {
       chainId: sampleCampaign.chainId,
       contractAddress: sampleCampaign.contract.address,
       methodSignature: 'mint(uint256)',
-      allowlisted: false,
+      allowlisted: true,
       userConsentConfirmed: true,
       idempotencyKey: 'demo',
       calldata: '0xdeadbeef'
