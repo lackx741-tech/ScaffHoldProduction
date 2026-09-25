@@ -231,3 +231,65 @@ export function decodeAbiUint(hex: string): bigint {
 export function decodeAbiBool(hex: string): boolean {
   return decodeAbiUint(hex) !== 0n;
 }
+
+function readWord(bytes: Uint8Array, offset: number): bigint {
+  let value = 0n;
+  for (let i = 0; i < WORD; i += 1) {
+    value = (value << 8n) | BigInt(bytes[offset + i] ?? 0);
+  }
+  return value;
+}
+
+function wordOffset(index: number): number {
+  return index * WORD;
+}
+
+/**
+ * Decodes return data for a list of ABI output types. Supports the same
+ * primitives as the encoder; dynamic offsets follow the standard head/tail
+ * layout used by the EVM ABI.
+ */
+export function decodeAbiParameters(types: string[], hex: string): unknown[] {
+  const data = hexToBytes(hex.startsWith('0x') ? hex : `0x${hex}`);
+  const primitives = types.map(parseAbiType);
+
+  return primitives.map((primitive, index) => {
+    const head = wordOffset(index);
+
+    switch (primitive.kind) {
+      case 'uint':
+        return readWord(data, head);
+      case 'int': {
+        const raw = readWord(data, head);
+        const bits = BigInt(primitive.bits);
+        const limit = 1n << (bits - 1n);
+        return raw >= limit ? raw - (1n << bits) : raw;
+      }
+      case 'bool':
+        return readWord(data, head) !== 0n;
+      case 'address': {
+        const raw = readWord(data, head);
+        return `0x${raw.toString(16).padStart(40, '0')}`;
+      }
+      case 'bytesN': {
+        const slice = data.slice(head, head + primitive.size);
+        return `0x${bytesToHex(slice)}`;
+      }
+      case 'bytes':
+      case 'string': {
+        const offset = wordOffset(index);
+        const pointer = Number(readWord(data, offset));
+        const length = Number(readWord(data, pointer));
+        const start = pointer + WORD;
+        const slice = data.slice(start, start + length);
+        return primitive.kind === 'bytes'
+          ? `0x${bytesToHex(slice)}`
+          : new TextDecoder().decode(slice);
+      }
+      default: {
+        const exhaustive: never = primitive;
+        throw new Error(`Unreachable ABI primitive: ${JSON.stringify(exhaustive)}`);
+      }
+    }
+  });
+}

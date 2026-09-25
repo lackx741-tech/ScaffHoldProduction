@@ -5,6 +5,7 @@ export type {
 export {
   canonicalSignature,
   decodeAbiBool,
+  decodeAbiParameters,
   decodeAbiUint,
   encodeAbiParameters,
   encodeFunctionData,
@@ -39,6 +40,17 @@ export { WalletAdapter } from './wallet.js';
 export { TransactionEngine } from './engine.js';
 export { mount } from './bootstrap.js';
 export type { MountOptions, MountedRuntime } from './bootstrap.js';
+export { ProjectRuntime } from './project-runtime.js';
+export type { ProjectReadCall, ProjectRuntimeOptions, ProjectWriteCall } from './project-runtime.js';
+export {
+  createWalletConnectProvider,
+  preferredProviderKind,
+  resolveProvider
+} from './walletconnect.js';
+export type {
+  ProviderKind,
+  WalletConnectProviderOptions
+} from './walletconnect.js';
 
 export {
   TERMINAL_STATUSES
@@ -49,8 +61,12 @@ export type {
   HexString,
   PreparedTransaction,
   RuntimeAbiItem,
+  RuntimeAction,
   RuntimeCampaign,
   RuntimeContract,
+  RuntimeTheme,
+  WalletConnectOptions,
+  WalletProviderKind,
   SendResult,
   TransactionIntent,
   TransactionLifecycleStatus,

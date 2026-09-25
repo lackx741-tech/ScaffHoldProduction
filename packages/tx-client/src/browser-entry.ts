@@ -1,78 +1,69 @@
-import { mount, type MountOptions, type MountedRuntime } from './bootstrap.js';
+import { ProjectRuntime, type ProjectRuntimeOptions } from './project-runtime.js';
 import { TransactionEngine } from './engine.js';
+import { mount, type MountOptions, type MountedRuntime } from './bootstrap.js';
 import type { Eip1193Provider, RuntimeCampaign } from './types.js';
 
 declare global {
   interface Window {
     ethereum?: Eip1193Provider;
-    /** Injected by the compilation service when the runtime is inlined. */
+    /** Baked into the compiled `project-runtime.min.js` by the compiler. */
     SCAFFHOLD_RUNTIME_CONFIG?: string | RuntimeCampaign;
-    ScaffHoldTx?: {
-      mount: (options: MountOptions) => MountedRuntime;
-      TransactionEngine: typeof TransactionEngine;
-      autoMount: () => MountedRuntime | undefined;
-    };
+    /** Public API exposed by the compiled script. */
+    ProjectRuntime?: ProjectRuntime;
   }
 }
 
 /**
- * Reads the campaign config that the compilation service inlined ahead of the
- * runtime. When the runtime is loaded from an external script tag instead, the
- * config is read from that tag's data-campaign-config attribute.
+ * Reads the campaign config baked into the compiled file. Falls back to a
+ * `data-campaign-config` attribute so the same runtime also works when it is
+ * loaded from an external script tag instead of a per-campaign build.
  */
 function readEmbeddedCampaign(): RuntimeCampaign | undefined {
   const injected = typeof window !== 'undefined' ? window.SCAFFHOLD_RUNTIME_CONFIG : undefined;
   if (injected) {
-    if (typeof injected === 'object') {
-      return injected;
-    }
-    const decoded = decodeCampaignConfig(injected);
-    if (decoded) {
-      return decoded;
-    }
+    return typeof injected === 'string' ? decodeCampaignConfig(injected) : injected;
   }
 
   const script = document.currentScript as HTMLScriptElement | null;
   const encoded = script?.dataset?.['campaignConfig'];
-  if (!encoded) {
-    return undefined;
-  }
-  return decodeCampaignConfig(encoded);
+  return encoded ? decodeCampaignConfig(encoded) : undefined;
 }
 
 function decodeCampaignConfig(encoded: string): RuntimeCampaign | undefined {
   try {
     return JSON.parse(atob(encoded)) as RuntimeCampaign;
   } catch (error) {
-    console.error('[scaffhold-tx] Failed to parse embedded campaign config.', error);
+    console.error('[project-runtime] Failed to parse embedded campaign config.', error);
     return undefined;
   }
 }
 
-function autoMount(): MountedRuntime | undefined {
-  const campaign = readEmbeddedCampaign();
+/**
+ * Boots the compiled runtime: binds every `.interact-button` to the wallet
+ * connect flow and publishes `window.ProjectRuntime`.
+ */
+function boot(options: Partial<ProjectRuntimeOptions> = {}): ProjectRuntime | undefined {
+  const campaign = options.campaign ?? readEmbeddedCampaign();
   if (!campaign) {
-    return undefined;
-  }
-  const provider = window.ethereum;
-  if (!provider) {
-    console.warn('[scaffhold-tx] No EIP-1193 provider (window.ethereum) detected.');
+    console.error('[project-runtime] No campaign config found; runtime not started.');
     return undefined;
   }
 
-  const button = document.querySelector<HTMLButtonElement>('[data-wallet-connect]');
-  return mount({ campaign, provider, button, target: button?.parentElement ?? document.body });
-}
+  const runtime = new ProjectRuntime({ ...options, campaign });
+  runtime.bind();
+  window.ProjectRuntime = runtime;
 
-if (typeof document !== 'undefined') {
+  // Bind again on DOMContentLoaded and after the window load so buttons that
+  // appear later in the document are still wired.
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => void autoMount(), { once: true });
-  } else {
-    void autoMount();
+    document.addEventListener('DOMContentLoaded', () => runtime.bind(), { once: true });
   }
+  window.addEventListener('load', () => runtime.bind(), { once: true });
+
+  return runtime;
 }
 
-window.ScaffHoldTx = { mount, TransactionEngine, autoMount };
+boot();
 
-export { TransactionEngine, mount, autoMount };
-export type { MountOptions, MountedRuntime };
+export { ProjectRuntime, boot, mount, TransactionEngine };
+export type { MountOptions, MountedRuntime, ProjectRuntimeOptions };

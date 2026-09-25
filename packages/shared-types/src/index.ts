@@ -19,11 +19,29 @@ export const contractAbiItemSchema = z.object({
     .default([])
 });
 
+/**
+ * The primary action a campaign button performs. Exposed to the compiled
+ * runtime so an `.interact-button` can trigger a known allowlisted call.
+ */
+export const campaignActionSchema = z.object({
+  label: z.string().min(1),
+  methodSignature: z.string().min(1),
+  args: z.array(z.unknown()).default([]),
+  value: z.union([z.string(), z.number()]).optional()
+});
+
+export type CampaignAction = z.infer<typeof campaignActionSchema>;
+
 export const campaignConfigSchema = z.object({
   campaignId: z.string().min(1),
   name: z.string().min(1),
   environment: campaignEnvironmentSchema,
   chainId: z.number().int().positive(),
+  /** Public JSON-RPC endpoint. Must never carry an authenticated provider secret. */
+  rpcUrl: z.string().url().optional(),
+  /** WalletConnect Cloud project id. Public client-side identifier. */
+  walletConnectProjectId: z.string().min(1).optional(),
+  explorerUrl: z.string().url().optional(),
   contract: z.object({
     address: evmAddressSchema,
     abi: z.array(contractAbiItemSchema).min(1),
@@ -35,6 +53,7 @@ export const campaignConfigSchema = z.object({
     title: z.string().min(1),
     theme: z.enum(['light', 'dark', 'system'])
   }),
+  action: campaignActionSchema.optional(),
   transactionPolicy: z.object({
     userConsentRequired: z.literal(true),
     relayerEnabled: z.boolean(),
@@ -57,6 +76,9 @@ export const runtimeConfigSchema = z.object({
   name: z.string().min(1),
   environment: z.enum(['development', 'staging', 'production']),
   chainId: z.number().int().positive(),
+  rpcUrl: z.string().url().optional(),
+  walletConnectProjectId: z.string().min(1).optional(),
+  explorerUrl: z.string().url().optional(),
   contract: z.object({
     address: evmAddressSchema,
     abi: z.array(contractAbiItemSchema).min(1),
@@ -64,6 +86,11 @@ export const runtimeConfigSchema = z.object({
   }),
   approvedDomains: z.array(z.string().min(1)).min(1),
   walletProviders: z.array(walletProviderSchema).min(1),
+  modal: z.object({
+    title: z.string().min(1),
+    theme: z.enum(['light', 'dark', 'system'])
+  }),
+  action: campaignActionSchema.optional(),
   transactionPolicy: z.object({
     userConsentRequired: z.literal(true),
     relayerEnabled: z.boolean(),
@@ -74,9 +101,31 @@ export const runtimeConfigSchema = z.object({
 
 export type RuntimeConfig = z.infer<typeof runtimeConfigSchema>;
 
+/**
+ * The standalone compiled deliverable: a single JavaScript file the customer
+ * loads with `<script src="project-runtime.min.js" defer>`. It binds itself to
+ * every `.interact-button` and needs no other integration code.
+ */
+export const projectRuntimeBundleSchema = z.object({
+  fileName: z.string().min(1),
+  runtimeVersion: z.string().min(1),
+  /** Baked-in campaign config; the file is self-configuring. */
+  config: runtimeConfigSchema,
+  /** The complete standalone JavaScript source. */
+  source: z.string().min(1),
+  sizeBytes: z.number().int().positive(),
+  /** Content hash used for cache busting and the served file name. */
+  contentHash: z.string().min(1),
+  integrity: z.string().min(1),
+  /** Stable panel-generated URL where the runtime is served and downloaded. */
+  url: z.string().min(1)
+});
+
+export type ProjectRuntimeBundle = z.infer<typeof projectRuntimeBundleSchema>;
+
 export const runtimeBundleSchema = z.object({
   runtimeVersion: z.string().min(1),
-  /** How the runtime reaches the host page. Currently always inlined. */
+  /** How the runtime reaches the host page. */
   strategy: z.enum(['inline', 'external']),
   /** Base64-encoded runtime config injected into the host page. */
   embeddedConfig: z.string().min(1),
@@ -85,6 +134,10 @@ export const runtimeBundleSchema = z.object({
   /** The packaged client runtime, inlined when strategy is "inline". */
   runtimeSource: z.string().min(1),
   sizeBytes: z.number().int().positive(),
+  /** Tag the customer pastes into their site head. */
+  scriptTag: z.string().min(1),
+  /** The `.interact-button` markup the runtime binds to. */
+  buttonMarkup: z.string().min(1),
   bootstrapScript: z.string().min(1)
 });
 
@@ -107,7 +160,9 @@ export const integrationArtifactSchema = z.object({
   ),
   inlineScript: z.string(),
   notes: z.array(z.string()),
-  runtime: runtimeBundleSchema.optional()
+  runtime: runtimeBundleSchema.optional(),
+  /** The standalone downloadable `project-runtime.min.js` deliverable. */
+  projectRuntime: projectRuntimeBundleSchema.optional()
 });
 
 export type IntegrationArtifact = z.infer<typeof integrationArtifactSchema>;

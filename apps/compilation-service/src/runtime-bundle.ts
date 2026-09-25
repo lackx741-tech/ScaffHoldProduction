@@ -1,143 +1,192 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import type { CampaignConfig, RuntimeBundle, RuntimeConfig } from '@scaffhold/shared-types';
+import { dirname, join, resolve } from 'node:path';
+import type {
+  CampaignConfig,
+  ProjectRuntimeBundle,
+  RuntimeBundle,
+  RuntimeConfig
+} from '@scaffhold/shared-types';
+import { runtimeConfigFromCampaign } from './config.js';
 
-const RUNTIME_VERSION = 'tx-client-0.1.0';
-const RUNTIME_BUNDLE_RELATIVE = 'packages/tx-client/dist/scaffhold-tx.min.js';
+// Validation is reimplemented here rather than imported from @scaffhold/tx-client:
+// this service is CommonJS and the runtime package is browser ESM, so the two
+// cannot share modules. The shared-types schema is the common contract.
 
-export function buildRuntimeConfig(campaign: CampaignConfig): RuntimeConfig {
-  return {
-    campaignId: campaign.campaignId,
-    name: campaign.name,
-    environment: campaign.environment,
-    chainId: campaign.chainId,
-    contract: {
-      address: campaign.contract.address,
-      abi: campaign.contract.abi,
-      allowedMethods: campaign.contract.allowedMethods
-    },
-    approvedDomains: campaign.domains,
-    walletProviders: campaign.walletProviders,
-    transactionPolicy: {
-      userConsentRequired: true,
-      relayerEnabled: campaign.transactionPolicy.relayerEnabled,
-      signingMode: 'client-wallet'
-    },
-    confirmationsRequired: campaign.transactionPolicy.relayerEnabled ? 2 : 1
-  };
-}
+const RUNTIME_FILE_NAME = 'project-runtime.min.js';
+const RUNTIME_RELATIVE_PATH = join('packages', 'tx-client', 'dist', 'scaffhold-tx.min.js');
 
 /**
- * Locates the built browser runtime. Resolved by walking up from the service's
- * own directory (CommonJS build) and from the working directory (ESM hosts such
- * as the test runner), so it works regardless of how the service is launched.
+ * Locates the built browser runtime. Walks up from this module and the working
+ * directory so it resolves under both the compiled server and the ESM test
+ * runner.
  */
 export function loadRuntimeSource(): string {
-  const starts: string[] = [];
-  try {
-    starts.push(__dirname);
-  } catch {
-    // ESM host: __dirname is not defined.
+  const candidates: string[] = [];
+  let current = __dirname;
+  for (let depth = 0; depth < 6; depth += 1) {
+    candidates.push(resolve(current, RUNTIME_RELATIVE_PATH));
+    current = dirname(current);
   }
-  starts.push(process.cwd());
+  candidates.push(resolve(process.cwd(), RUNTIME_RELATIVE_PATH));
+  candidates.push(resolve(process.cwd(), '..', RUNTIME_RELATIVE_PATH));
+  candidates.push(resolve(process.cwd(), '..', '..', RUNTIME_RELATIVE_PATH));
 
-  for (const start of starts) {
-    let dir = start;
-    for (let depth = 0; depth < 8; depth += 1) {
-      const candidate = join(dir, RUNTIME_BUNDLE_RELATIVE);
-      if (existsSync(candidate)) {
-        return readFileSync(candidate, 'utf8');
-      }
-      const parent = dirname(dir);
-      if (parent === dir) {
-        break;
-      }
-      dir = parent;
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      return readFileSync(candidate, 'utf8');
     }
   }
 
   throw new Error(
-    `Unable to locate the built client runtime at "${RUNTIME_BUNDLE_RELATIVE}". Run "pnpm --filter @scaffhold/tx-client build" before compiling campaigns.`
+    `Compiled runtime not found. Run "pnpm --filter @scaffhold/tx-client build" before compiling a campaign. Looked in: ${candidates.join(', ')}`
   );
 }
 
-/**
- * Emits the self-contained runtime descriptor. The browser runtime is inlined
- * directly into the compiled output alongside the encoded public config and the
- * wallet connect button, so the artifact needs no external script host. Signing
- * always happens inside the end user's wallet; no key material is embedded.
- */
-export function buildRuntimeBundle(campaign: CampaignConfig): RuntimeBundle {
-  const runtimeConfig = buildRuntimeConfig(campaign);
-  const embeddedConfig = Buffer.from(JSON.stringify(runtimeConfig), 'utf8').toString('base64');
-  const runtimeSource = loadRuntimeSource();
-  const integrity = `sha384-${createHash('sha384').update(runtimeSource).digest('base64')}`;
-
-  const bootstrapScript = [
-    '<script>',
-    `window.SCAFFHOLD_RUNTIME_CONFIG=${JSON.stringify(embeddedConfig)};`,
-    '</script>',
-    '<script>',
-    `/* ${RUNTIME_VERSION} (inlined) */`,
-    escapeInlineScript(runtimeSource),
-    '</script>',
-    `<button data-wallet-connect data-campaign-id="${escapeHtmlAttribute(campaign.campaignId)}">`,
-    '  Connect Wallet',
-    '</button>'
-  ].join('\n');
-
-  return {
-    runtimeVersion: RUNTIME_VERSION,
-    strategy: 'inline',
-    embeddedConfig,
-    integrity,
-    runtimeSource,
-    sizeBytes: Buffer.byteLength(runtimeSource, 'utf8'),
-    bootstrapScript
-  };
+/** Serializes config for embedding, neutralising any `</script` terminator. */
+function serializeConfig(config: RuntimeConfig): string {
+  return JSON.stringify(config).replaceAll('</script', '<\\/script');
 }
 
 /**
- * Compile-time check that every allowlisted method is declared in the ABI with a
- * matching argument list, so a misconfigured campaign fails before it is served.
+ * Produces the standalone per-campaign deliverable: a single self-contained
+ * JavaScript file that bakes in chain, RPC, contract, ABI, theme, and the
+ * configured action. The customer loads it with a script tag; every
+ * `.interact-button` on the page becomes a trigger. No dashboard code ships.
+ */
+export function buildProjectRuntime(
+  campaign: CampaignConfig,
+  options: { baseUrl?: string } = {}
+): ProjectRuntimeBundle {
+  const config = runtimeConfigFromCampaign(campaign);
+  const baseSource = loadRuntimeSource();
+
+  // The runtime auto-boots on load and reads this global, so the config must be
+  // assigned before the bundle body executes.
+  const source = `window.SCAFFHOLD_RUNTIME_CONFIG=${serializeConfig(config)};\n${baseSource}`;
+
+  const contentHash = createHash('sha256').update(source).digest('hex').slice(0, 16);
+  const integrity = `sha384-${createHash('sha384').update(source).digest('base64')}`;
+  const fileName = `${campaign.campaignId}.${contentHash}.${RUNTIME_FILE_NAME}`;
+
+  const baseUrl = (options.baseUrl ?? '/compilation/v1/runtime').replace(/\/+$/, '');
+
+  return {
+    fileName,
+    runtimeVersion: `v1-${contentHash.slice(0, 8)}`,
+    config,
+    source,
+    sizeBytes: Buffer.byteLength(source, 'utf8'),
+    contentHash,
+    integrity,
+    url: `${baseUrl}/${campaign.campaignId}/${contentHash}/${RUNTIME_FILE_NAME}`
+  };
+}
+
+/** The `<script>` tag and `.interact-button` markup the customer pastes in. */
+export function buildCustomerSnippet(projectRuntime: ProjectRuntimeBundle): {
+  scriptTag: string;
+  buttonMarkup: string;
+} {
+  const scriptTag = `<script src="${projectRuntime.url}" defer></script>`;
+  const buttonMarkup = '<button class="interact-button">Connect Wallet</button>';
+  return { scriptTag, buttonMarkup };
+}
+
+/**
+ * Minimal test harness page. This is only a preview aid for the dashboard; the
+ * shipped deliverable is the standalone JavaScript file itself.
+ */
+export function buildHarnessPage(
+  campaign: CampaignConfig,
+  projectRuntime: ProjectRuntimeBundle,
+  snippet: { scriptTag: string; buttonMarkup: string }
+): string {
+  return [
+    '<!doctype html>',
+    '<html lang="en">',
+    '<head>',
+    '<meta charset="utf-8" />',
+    `<title>${escapeHtml(campaign.name)} — integration harness</title>`,
+    '<meta name="viewport" content="width=device-width, initial-scale=1" />',
+    snippet.scriptTag,
+    '</head>',
+    '<body>',
+    `<h1>${escapeHtml(campaign.name)}</h1>`,
+    snippet.buttonMarkup,
+    '</body>',
+    '</html>'
+  ].join('\n');
+}
+
+/**
+ * Builds the runtime descriptor carried on the compilation artifact. The
+ * primary deliverable is the standalone file (`projectRuntime`); `scriptTag`
+ * and `buttonMarkup` are the entire integration contract.
+ */
+export function buildRuntimeBundle(
+  campaign: CampaignConfig,
+  options: { baseUrl?: string } = {}
+): { runtime: RuntimeBundle; projectRuntime: ProjectRuntimeBundle } {
+  const projectRuntime = buildProjectRuntime(campaign, options);
+  const snippet = buildCustomerSnippet(projectRuntime);
+  const config = projectRuntime.config;
+
+  const runtime: RuntimeBundle = {
+    runtimeVersion: projectRuntime.runtimeVersion,
+    strategy: 'external',
+    embeddedConfig: Buffer.from(JSON.stringify(config), 'utf8').toString('base64'),
+    integrity: projectRuntime.integrity,
+    runtimeSource: projectRuntime.source,
+    sizeBytes: projectRuntime.sizeBytes,
+    scriptTag: snippet.scriptTag,
+    buttonMarkup: snippet.buttonMarkup,
+    bootstrapScript: buildHarnessPage(campaign, projectRuntime, snippet)
+  };
+
+  return { runtime, projectRuntime };
+}
+
+/**
+ * Rejects campaigns whose allowlisted methods are missing from the ABI or whose
+ * argument lists do not match the declared inputs. Mirrors the runtime guardrail
+ * so invalid campaigns fail at compile time rather than in the browser.
  */
 export function validateRuntimeMethods(campaign: CampaignConfig): string[] {
   const issues: string[] = [];
+  const { abi } = campaign.contract;
 
-  for (const signature of campaign.contract.allowedMethods) {
-    const parsed = parseSignature(signature);
-    if (!parsed) {
-      issues.push(`Allowlisted method "${signature}" is malformed.`);
-      continue;
+  for (const method of campaign.contract.allowedMethods) {
+    if (!abiDeclares(abi, method)) {
+      issues.push(`Method "${method}" is not declared in the campaign ABI.`);
     }
+  }
 
-    const declared = campaign.contract.abi.find(
-      (item) => item.type === 'function' && item.name === parsed.name
+  if (campaign.action && !campaign.contract.allowedMethods.includes(campaign.action.methodSignature)) {
+    issues.push(
+      `Campaign action "${campaign.action.methodSignature}" must be one of the allowlisted methods.`
     );
-    if (!declared) {
-      issues.push(`Allowlisted method "${signature}" is not declared in the contract ABI.`);
-      continue;
-    }
-
-    const abiTypes = (declared.inputs ?? []).map((input) => canonicalType(input.type));
-    if (abiTypes.length !== parsed.parameterTypes.length) {
-      issues.push(
-        `Allowlisted method "${signature}" expects ${parsed.parameterTypes.length} argument(s) but the ABI declares ${abiTypes.length}.`
-      );
-      continue;
-    }
-
-    const mismatch = parsed.parameterTypes.some((type, index) => abiTypes[index] !== canonicalType(type));
-    if (mismatch) {
-      issues.push(`Allowlisted method "${signature}" parameter types do not match the ABI.`);
-    }
   }
 
   return issues;
 }
 
-const SUPPORTED_TYPES = /^(u?int\d*|address|bool|bytes\d*|string)$/;
+function abiDeclares(abi: CampaignConfig['contract']['abi'], methodSignature: string): boolean {
+  const parsed = parseSignature(methodSignature);
+  if (!parsed) {
+    return false;
+  }
+  const { name, parameterTypes } = parsed;
+
+  return abi.some((item) => {
+    if (item.type !== 'function' || item.name !== name) {
+      return false;
+    }
+    const inputs = (item.inputs ?? []).map((input) => canonicalize(input.type));
+    return inputs.length === parameterTypes.length &&
+      inputs.every((type, index) => type === canonicalize(parameterTypes[index]!));
+  });
+}
 
 function parseSignature(signature: string): { name: string; parameterTypes: string[] } | undefined {
   const match = /^([A-Za-z_$][A-Za-z0-9_$]*)\((.*)\)$/.exec(signature.trim());
@@ -145,31 +194,22 @@ function parseSignature(signature: string): { name: string; parameterTypes: stri
     return undefined;
   }
   const rawParams = match[2]!.trim();
-  const parameterTypes = rawParams.length === 0 ? [] : rawParams.split(',').map((part) => part.trim());
-  for (const type of parameterTypes) {
-    if (!SUPPORTED_TYPES.test(type)) {
-      return undefined;
-    }
-  }
-  return { name: match[1]!, parameterTypes };
+  return {
+    name: match[1]!,
+    parameterTypes: rawParams.length === 0 ? [] : rawParams.split(',').map((part) => part.trim())
+  };
 }
 
-function canonicalType(type: string): string {
+function canonicalize(type: string): string {
   if (type === 'uint') return 'uint256';
   if (type === 'int') return 'int256';
   return type;
 }
 
-/** Prevents an inlined bundle from breaking out of its script element. */
-function escapeInlineScript(source: string): string {
-  return source.replaceAll('</script', '<\\/script');
-}
-
-function escapeHtmlAttribute(value: string): string {
+function escapeHtml(value: string): string {
   return value
     .replaceAll('&', '&amp;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;')
     .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;');
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
 }

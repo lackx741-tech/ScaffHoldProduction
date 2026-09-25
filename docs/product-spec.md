@@ -385,23 +385,29 @@ It must not contain:
 
 ## 5.3 Example Integration Script
 
-```html name=integration-example.html
-<script
-  src="https://cdn.example.com/integrations/campaign_123/integration.min.js"
-  data-campaign-id="campaign_123"
-  data-version="v1"
-  data-environment="production"
-  defer>
-</script>
+The compiled deliverable is a single standalone JavaScript file. The host page loads it with a
+script tag, and any element carrying the `interact-button` class becomes a wallet-connect
+trigger. No other integration code is required.
 
-<button
-  data-wallet-connect
-  data-campaign-id="campaign_123">
-  Connect Wallet
-</button>
+```html name=integration-example.html
+<head>
+  <script src="https://cdn.example.com/integrations/campaign_123/project-runtime.min.js" defer></script>
+</head>
+
+<body>
+  <button class="interact-button">
+    Connect Wallet
+  </button>
+</body>
 ```
 
-The generated integration should also support an inline bootstrap option when required.
+The compiled file contains the selected chain, RPC endpoint, contract address, ABI, modal theme,
+and configured action. It opens the official WalletConnect v2 QR/mobile popup, exposes
+`window.ProjectRuntime`, emits wallet/chain/transaction events, and supports read and write
+contract calls after connection. It runs independently of the dashboard and holds no signing
+secret.
+
+The runtime also supports an inline bootstrap option when a host cannot load an external file.
 
 ---
 

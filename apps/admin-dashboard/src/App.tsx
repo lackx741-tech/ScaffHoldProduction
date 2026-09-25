@@ -20,7 +20,7 @@ const serviceCards = [
   },
   {
     title: 'Compilation Service',
-    subtitle: 'Validates campaign config and emits the artifact + client runtime manifest',
+    subtitle: 'Emits the standalone project-runtime.min.js and its stable download URL',
     endpoint: '/compilation/v1/compile'
   }
 ];
@@ -39,9 +39,9 @@ function App() {
         <p className="eyebrow">ScaffHoldProduction</p>
         <h1>Distributed Web3 campaign platform scaffold</h1>
         <p className="lede">
-          This dashboard is a runnable navigation shell for configuring campaigns, contracts,
-          integrations, domains, and compilation workflows while backend services remain
-          scaffold-only.
+          The control panel compiles a campaign into a standalone JavaScript runtime. Customers
+          load that one file and drop the <code>interact-button</code> class on any element to
+          open the WalletConnect popup and run contract calls.
         </p>
       </header>
 
@@ -59,17 +59,25 @@ function App() {
           <ul className="stack-list">
             <li>Environment-aware campaign metadata</li>
             <li>Allowlisted contract/method configuration</li>
-            <li>Wallet provider and modal customization placeholders</li>
+            <li>WalletConnect v2 provider, modal theme, and configured action</li>
             <li>Compilation and domain verification orchestration entry points</li>
           </ul>
         </article>
 
         <article className="panel feature-panel">
-          <h2>Compilation preview</h2>
+          <h2>Compiled deliverable</h2>
           <div className="artifact-card">
-            <span className="artifact-version">tx-client runtime</span>
-            <p>Produces a deterministic manifest, client runtime descriptor, and inline bootstrap snippet.</p>
-            <code>dist/scaffhold-tx.min.js</code>
+            <span className="artifact-version">project-runtime.min.js</span>
+            <p>
+              A single standalone JavaScript file with the chain, RPC, contract, ABI, theme and
+              action baked in. Download it or serve it from its stable URL.
+            </p>
+            <code>{'<script src="project-runtime.min.js" defer></script>'}</code>
+            <p>
+              Any element with the <code>interact-button</code> class becomes a WalletConnect
+              trigger. No other integration code is required.
+            </p>
+            <code>{'<button class="interact-button">Connect Wallet</button>'}</code>
           </div>
         </article>
       </section>

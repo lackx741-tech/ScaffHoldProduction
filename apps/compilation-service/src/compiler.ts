@@ -19,12 +19,14 @@ function stableStringify(value: unknown): string {
   return JSON.stringify(value);
 }
 
-
-export function buildPlaceholderArtifact(campaign: CampaignConfig): IntegrationArtifact {
+export function buildPlaceholderArtifact(
+  campaign: CampaignConfig,
+  options: { baseUrl?: string } = {}
+): IntegrationArtifact {
   const serialized = stableStringify(campaign);
   const bundleHash = createHash('sha256').update(serialized).digest('hex');
   const version = `v1-${bundleHash.slice(0, 8)}`;
-  const runtime = buildRuntimeBundle(campaign);
+  const { runtime, projectRuntime } = buildRuntimeBundle(campaign, options);
 
   return {
     campaignId: campaign.campaignId,
@@ -36,17 +38,19 @@ export function buildPlaceholderArtifact(campaign: CampaignConfig): IntegrationA
     supportedChains: [campaign.chainId],
     walletProviders: campaign.walletProviders,
     files: [
-      { path: 'dist/integration.js', description: 'Hosted bundle entrypoint.' },
-      { path: 'dist/integration.min.js', description: 'Production bundle entrypoint.' },
-      { path: 'dist/integration.css', description: 'Presentation layer styles.' },
+      {
+        path: projectRuntime.fileName,
+        description: 'Standalone runtime. Add with a script tag; binds every .interact-button.'
+      },
       { path: 'dist/manifest.json', description: 'Versioned public integration manifest.' },
-      { path: 'dist/integrity.json', description: 'SRI and content hash metadata.' },
-      { path: 'dist/README.md', description: 'Installation instructions for the compiled artifact.' }
+      { path: 'dist/integrity.json', description: 'SRI and content hash metadata.' }
     ],
-    inlineScript: runtime.bootstrapScript,
+    inlineScript: runtime.scriptTag,
     runtime,
+    projectRuntime,
     notes: [
-      'The client runtime is inlined into the compiled output; no external script host is required.',
+      'The deliverable is a standalone JavaScript file. Load it with a script tag; no dashboard code is required.',
+      'Every element with the .interact-button class becomes a wallet-connect trigger automatically.',
       'The runtime signs exclusively through the end user wallet; no key material is embedded.'
     ]
   };

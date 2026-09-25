@@ -4,6 +4,8 @@
     "name": "Launch Alpha",
     "environment": "development",
     "chainId": 1,
+    "rpcUrl": "https://eth.llamarpc.com",
+    "walletConnectProjectId": "REPLACE_WITH_WALLETCONNECT_PROJECT_ID",
     "contract": {
       "address": "0x1111111111111111111111111111111111111111",
       "abi": [
@@ -18,13 +20,27 @@
           ]
         }
       ],
-      "allowedMethods": ["mint(uint256)"]
+      "allowedMethods": [
+        "mint(uint256)"
+      ]
     },
-    "domains": ["app.example.com"],
-    "walletProviders": ["reown", "rainbowkit"],
+    "domains": [
+      "app.example.com"
+    ],
+    "walletProviders": [
+      "walletconnect-v2",
+      "injected"
+    ],
     "modal": {
       "title": "Connect wallet to mint",
       "theme": "dark"
+    },
+    "action": {
+      "label": "Mint 1",
+      "methodSignature": "mint(uint256)",
+      "args": [
+        1
+      ]
     },
     "transactionPolicy": {
       "userConsentRequired": true,

@@ -15,11 +15,14 @@
     "dist"
   ],
   "scripts": {
-    "build": "pnpm exec tsc -p tsconfig.json && pnpm exec esbuild src/browser-entry.ts --bundle --format=iife --global-name=ScaffHoldTx --platform=browser --target=es2020 --minify --outfile=dist/scaffhold-tx.min.js",
+    "build": "pnpm exec tsc -p tsconfig.json && pnpm exec esbuild src/browser-entry.ts --bundle --format=iife --global-name=ScaffHoldTx --platform=browser --target=es2020 --minify --legal-comments=none --outfile=dist/scaffhold-tx.min.js",
     "lint": "pnpm exec eslint src --ext .ts",
     "typecheck": "pnpm exec tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {
     "esbuild": "^0.28.2"
+  },
+  "dependencies": {
+    "@walletconnect/ethereum-provider": "^2.25.0"
   }
 }

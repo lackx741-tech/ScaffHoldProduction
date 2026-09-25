@@ -33,7 +33,7 @@ examples/
 - Placeholder migration SQL for initial core tables
 - Health and readiness endpoints for each backend service
 - Placeholder REST routes for campaigns, contracts, domains, integrations, scanner reads, transaction preparation/status, and compilation
-- Client-side transaction runtime (`packages/tx-client`) compiled to a dependency-free browser bundle
+- Standalone `project-runtime.min.js` deliverable that binds `.interact-button` to WalletConnect v2
 - CI workflow for install, lint, typecheck, test, and build
 
 ## Client transaction runtime
@@ -53,28 +53,79 @@ Key properties:
 - **Explicit consent.** Submission only happens after the approval callback returns `true`; rejection is recorded as `USER_CANCELLED` with no wallet submission.
 - **Idempotency.** A deterministic intent key blocks duplicate submissions for the same campaign, chain, sender, method, args, and value.
 
-The package builds two outputs: a typed ESM module (`dist/index.js`) and a minified IIFE browser bundle (`dist/scaffhold-tx.min.js`, ~26 kB, zero runtime dependencies) that exposes the `ScaffHoldTx` global.
+## The compiled deliverable
 
-```bash
-pnpm --filter @scaffhold/tx-client build
-```
-
-The compilation service inlines that bundle directly into the compiled integration, so the emitted artifact is self-contained — it needs no external script host. `artifact.runtime` carries:
-
-- `strategy: 'inline'` and the full `runtimeSource`
-- `embeddedConfig` — base64 public campaign config injected as `window.SCAFFHOLD_RUNTIME_CONFIG`
-- `integrity` — SRI `sha384` hash of the runtime source
-- `bootstrapScript` — the ready-to-paste HTML: an inline config script, the inline runtime, and a `data-wallet-connect` button
-
-The runtime watches for the button, adopts it, and wires a live status region beneath it:
+The control panel compiles a campaign into **one standalone JavaScript file**. The customer
+integrates it with a script tag and the `interact-button` class — nothing else:
 
 ```html
-<script>window.SCAFFHOLD_RUNTIME_CONFIG="<base64 runtime config>";</script>
-<script>/* inlined scaffhold-tx runtime */</script>
-<button data-wallet-connect data-campaign-id="<campaign-id>">Connect Wallet</button>
+<head>
+  <script src="project-runtime.min.js" defer></script>
+</head>
+<body>
+  <button class="interact-button">Connect Wallet</button>
+</body>
 ```
 
-Compiling a campaign requires the built runtime; `buildRuntimeBundle` locates `packages/tx-client/dist/scaffhold-tx.min.js` and throws a clear error if it is missing. Campaigns whose allowlisted methods are absent from the ABI, or whose argument lists do not match, are rejected at compile time.
+The compiled file:
+
+- Finds **every** `.interact-button` automatically, including buttons added to the DOM later.
+- Opens the official **WalletConnect v2** QR/mobile popup when one is clicked.
+- Contains the selected chain, RPC, contract address, ABI, theme, and configured action.
+- Exposes `window.ProjectRuntime`.
+- Emits wallet, chain, and transaction events.
+- Supports read and write contract calls after connection.
+- Works independently — it loads no dashboard code and holds no signing secret.
+- Is downloadable and served from a stable panel-generated URL.
+
+### Integration contract
+
+| What | Value |
+| --- | --- |
+| Script tag | `<script src="{url}" defer></script>` |
+| Trigger | Any element with `class="interact-button"` |
+| Global | `window.ProjectRuntime` |
+
+Both strings are returned on the compilation artifact as `inlineScript` and
+`runtime.buttonMarkup`, so the panel can show them ready to copy.
+
+### Public API
+
+```ts
+window.ProjectRuntime.connect();              // WalletConnect v2 popup -> session
+window.ProjectRuntime.read({ methodSignature: 'totalSupply()' });
+window.ProjectRuntime.write({ methodSignature: 'mint(uint256)', args: [1] });
+window.ProjectRuntime.on(({ type, payload }) => { /* wallet.*, chain.*, transaction.* */ });
+```
+
+`write()` runs the full enforced sequence — prepare, simulate, explicit approval, wallet
+submission, confirmation — and never signs locally.
+
+### Artifact fields
+
+`artifact.projectRuntime` carries the deliverable:
+
+- `fileName` — content-hashed, e.g. `cmp_launch_alpha.8518a44083f618f9.project-runtime.min.js`
+- `source` — the complete standalone JavaScript
+- `config` — the chain, RPC, contract, ABI, theme, and action baked into the file
+- `integrity` — SRI `sha384` of the source
+- `url` — stable panel-generated URL; add `/download` for an attachment
+
+`artifact.runtime` carries the integration descriptor (`scriptTag`, `buttonMarkup`) and a
+preview harness page. The harness is only a test aid — the shipped product is the file.
+
+The runtime is built by esbuild from `packages/tx-client/src/browser-entry.ts`. It bundles
+WalletConnect v2 (~1.9 MB minified) so the deliverable stays a single self-contained file.
+
+```bash
+pnpm --filter @scaffhold/tx-client build   # required before compiling campaigns
+```
+
+Compiling a campaign requires the built runtime; `loadRuntimeSource` locates
+`packages/tx-client/dist/scaffhold-tx.min.js` and throws a clear error if it is missing.
+Campaigns whose allowlisted methods are absent from the ABI, or whose argument lists do not
+match, are rejected at compile time. A campaign `action` must also be one of the allowlisted
+methods.
 
 ## Scaffold-only limitations
 

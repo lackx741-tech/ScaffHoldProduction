@@ -39,6 +39,8 @@ export interface RuntimeAbiItem {
   name: string;
   type: string;
   inputs?: Array<{ name: string; type: string }>;
+  outputs?: Array<{ name: string; type: string }>;
+  stateMutability?: string;
 }
 
 export interface RuntimeContract {
@@ -47,14 +49,47 @@ export interface RuntimeContract {
   allowedMethods: string[];
 }
 
+export type RuntimeTheme = 'light' | 'dark' | 'system';
+
+export interface RuntimeAction {
+  label: string;
+  methodSignature: string;
+  args?: unknown[];
+  value?: string | number;
+}
+
+/**
+ * Wallet provider selection for the compiled runtime. `walletconnect` opens the
+ * official WalletConnect v2 QR/mobile popup; `injected` uses `window.ethereum`.
+ */
+export type WalletProviderKind = 'walletconnect' | 'injected';
+
+export interface WalletConnectOptions {
+  projectId: string;
+  /** Human-readable dApp name shown in the wallet. */
+  dappName?: string;
+  dappUrl?: string;
+  dappIcons?: string[];
+}
+
 export interface RuntimeCampaign {
   campaignId: string;
   name: string;
   environment: 'development' | 'staging' | 'production';
   chainId: number;
+  /** Public JSON-RPC endpoint, baked into the compiled file. */
+  rpcUrl?: string;
+  /** WalletConnect Cloud project id. Public client-side identifier. */
+  walletConnectProjectId?: string;
+  explorerUrl?: string;
   contract: RuntimeContract;
   approvedDomains: string[];
   walletProviders: string[];
+  modal: {
+    title: string;
+    theme: RuntimeTheme;
+  };
+  action?: RuntimeAction;
   transactionPolicy: {
     userConsentRequired: true;
     relayerEnabled: boolean;

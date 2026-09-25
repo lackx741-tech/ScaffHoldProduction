@@ -1,64 +1,33 @@
-import { TransactionEngine } from './engine.js';
 import { shortenAddress } from './format.js';
-import { assertNoSecretMarkers } from './guardrails.js';
-import type { RuntimeCampaign, TransactionRuntimeEvent, TransactionRuntimeOptions } from './types.js';
+import { ProjectRuntime, type ProjectRuntimeOptions } from './project-runtime.js';
+import type { RuntimeCampaign } from './types.js';
 
-export interface MountOptions extends Omit<TransactionRuntimeOptions, 'campaign'> {
+export interface MountOptions extends Omit<ProjectRuntimeOptions, 'campaign'> {
   campaign: RuntimeCampaign;
-  /** Element or selector to mount the connect button into. Defaults to body. */
-  target?: string | HTMLElement;
-  /** Existing connect button/trigger to wire up instead of creating one. */
-  button?: HTMLButtonElement | null;
-  /** Renders a status region listing tracked transactions. */
+  /** Selector for trigger buttons. Defaults to every `.interact-button`. */
+  selector?: string;
+  /** Renders a status region under the first trigger. Defaults to true. */
   showStatus?: boolean;
 }
 
 export interface MountedRuntime {
-  engine: TransactionEngine;
+  runtime: ProjectRuntime;
   destroy: () => void;
 }
 
 /**
- * Wires the wallet connect button and status region against an existing
- * placeholder button, or renders one when none is present, then returns the
- * underlying engine for programmatic use.
+ * Convenience wrapper over `ProjectRuntime` that also renders a status region.
+ * The compiled deliverable binds `.interact-button` directly; `mount()` is for
+ * hosts that want the status line without writing their own UI.
  */
 export function mount(options: MountOptions): MountedRuntime {
-  assertNoSecretMarkers(options.campaign);
-
   if (typeof document === 'undefined') {
-    throw new Error('mount() requires a DOM. Use TransactionEngine directly for headless hosts.');
+    throw new Error('mount() requires a DOM. Use ProjectRuntime for headless hosts.');
   }
 
-  const adopted =
-    typeof options.button === 'string'
-      ? document.querySelector<HTMLButtonElement>(options.button)
-      : options.button ?? null;
-
-  const target =
-    typeof options.target === 'string'
-      ? document.querySelector(options.target)
-      : options.target ?? adopted?.parentElement ?? document.body;
-
-  if (!target) {
-    throw new Error('mount() target not found.');
-  }
-
-  const container = document.createElement('div');
-  container.className = 'scaffhold-runtime';
-  container.dataset.campaignId = options.campaign.campaignId;
-
-  const button = adopted ?? document.createElement('button');
-  button.dataset.walletConnect = '';
-  button.dataset.campaignId = options.campaign.campaignId;
-  if (!button.textContent) {
-    button.textContent = 'Connect Wallet';
-  }
-  if (!adopted) {
-    button.type = 'button';
-    button.style.cssText =
-      'padding:12px 20px;border-radius:10px;border:0;background:#4f7cff;color:#fff;font:600 15px system-ui,sans-serif;cursor:pointer';
-  }
+  const selector = options.selector ?? '.interact-button';
+  const runtime = new ProjectRuntime(options);
+  runtime.bind(selector);
 
   const status = document.createElement('div');
   status.className = 'scaffhold-runtime__status';
@@ -66,61 +35,41 @@ export function mount(options: MountOptions): MountedRuntime {
   status.setAttribute('aria-live', 'polite');
   status.style.cssText = 'margin-top:10px;font:13px/1.5 system-ui,sans-serif;color:#3c4459';
 
-  container.append(status);
-  if (adopted) {
-    // Move the page's own button into the runtime container, keeping its position.
-    adopted.insertAdjacentElement('beforebegin', container);
-    container.prepend(adopted);
+  const firstButton = document.querySelector(selector);
+  if (firstButton?.parentElement) {
+    firstButton.parentElement.append(status);
   } else {
-    container.prepend(button);
-    target.appendChild(container);
+    document.body.append(status);
   }
 
-  const engine = new TransactionEngine(options);
-
-  const unsubscribe = engine.onEvent((event: TransactionRuntimeEvent) => {
-    if (!options.showStatus) {
+  const showStatus = options.showStatus ?? true;
+  const unsubscribe = runtime.on((event) => {
+    if (!showStatus) {
       return;
     }
-    if (event.type === 'transaction.status.updated') {
-      const { status: txStatus, txHash, error } = event.payload as {
-        status?: string;
-        txHash?: string;
-        error?: { message?: string };
-      };
-      if (txHash) {
-        status.textContent = `${txStatus}: ${shortenAddress(txHash, 10, 8)}`;
-      } else if (error?.message) {
-        status.textContent = `${txStatus}: ${error.message}`;
-      } else if (txStatus) {
-        status.textContent = txStatus;
-      }
+    if (event.type === 'wallet.connected') {
+      const { address, chainId } = event.payload as { address?: string; chainId?: number };
+      status.textContent = address
+        ? `Connected ${shortenAddress(address)} on chain ${chainId}.`
+        : 'Connected.';
+      return;
+    }
+    if (event.type === 'transaction.confirmed') {
+      const { txHash } = event.payload as { txHash?: string };
+      status.textContent = txHash ? `Confirmed: ${shortenAddress(txHash, 10, 8)}` : 'Confirmed.';
+      return;
+    }
+    if (event.type === 'runtime.error') {
+      status.textContent = `Error: ${String(event.payload.message ?? 'unknown error')}`;
     }
   });
 
-  const onClick = async () => {
-    button.disabled = true;
-    try {
-      const result = await engine.connect();
-      button.textContent = shortenAddress(result.address);
-      status.textContent = `Connected on chain ${result.chainId}.`;
-    } catch (error) {
-      status.textContent = `Connection failed: ${(error as Error).message}`;
-      button.disabled = false;
-    }
-  };
-
-  button.addEventListener('click', onClick);
-
   return {
-    engine,
+    runtime,
     destroy: () => {
       unsubscribe();
-      button.removeEventListener('click', onClick);
-      if (adopted) {
-        container.insertAdjacentElement('beforebegin', adopted);
-      }
-      container.remove();
+      runtime.destroy();
+      status.remove();
     }
   };
 }

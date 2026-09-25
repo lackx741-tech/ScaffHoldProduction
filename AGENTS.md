@@ -54,21 +54,24 @@ Two build outputs: typed ESM (`dist/index.js`) and a minified IIFE bundle (`dist
 pnpm --filter @scaffhold/tx-client build
 ```
 
-The runtime reads its config from `window.SCAFFHOLD_RUNTIME_CONFIG` (base64), falling back to `data-campaign-config` on its own script tag. `mount()` adopts an existing `[data-wallet-connect]` button when present, otherwise creates one.
+The runtime reads its config from `window.SCAFFHOLD_RUNTIME_CONFIG` (base64 or object), falling back to `data-campaign-config` on its own script tag. `ProjectRuntime.bind()` finds every `.interact-button` and re-scans on DOM mutations. `mount()` is a thin adapter over `ProjectRuntime` that adds a status region.
 
-Tests for this package: `tests/tx-client-encoding.test.ts` (keccak/ABI vectors), `tests/tx-client-engine.test.ts` (guardrails + lifecycle), `tests/tx-client-browser.test.ts` (executes the real compiled inline output in jsdom — run `pnpm --filter @scaffhold/tx-client build` first).
+`ProjectRuntime` is the public API: `connect()`, `read()`, `write()`, `on()`. It selects WalletConnect v2 when a `walletConnectProjectId` is set, otherwise `window.ethereum`. WalletConnect is imported dynamically so injected-only hosts do not pay for it.
+
+Tests for this package: `tests/tx-client-encoding.test.ts` (keccak/ABI vectors), `tests/tx-client-engine.test.ts` (guardrails + lifecycle), `tests/tx-client-browser.test.ts` (executes the real compiled standalone file in jsdom — run `pnpm --filter @scaffhold/tx-client build` first).
 
 ## Compilation service
 
-`apps/compilation-service/src/runtime-bundle.ts` builds the `artifact.runtime` descriptor. The runtime is **inlined** into the compiled output (`strategy: 'inline'`): `buildRuntimeBundle` reads `packages/tx-client/dist/scaffhold-tx.min.js` from disk via `loadRuntimeSource`, so `@scaffhold/tx-client` must be built before campaigns are compiled. `bootstrapScript` is the complete self-contained HTML (inline config script + inline runtime + connect button) and is also emitted as `artifact.inlineScript`.
+`apps/compilation-service/src/runtime-bundle.ts` produces the deliverable. `buildProjectRuntime` prepends `window.SCAFFHOLD_RUNTIME_CONFIG={...};` to the built bundle (`loadRuntimeSource` reads `packages/tx-client/dist/scaffhold-tx.min.js` from disk, so `@scaffhold/tx-client` must be built first), hashes it, and returns `artifact.projectRuntime` with `fileName`, `source`, `config`, `integrity`, `sizeBytes`, and a stable `url`.
 
-- `integrity` is the SRI `sha384` of the runtime source.
-- `embeddedConfig` is base64 public config — no secrets, ever.
-- `escapeInlineScript` rewrites `</script` so an inlined bundle cannot break out of its script element.
-- It intentionally does **not** import `@scaffhold/tx-client` — the server is CommonJS and the runtime is browser ESM, so the config contract is duplicated in `shared-types`.
+The integration contract is only two strings, returned as `artifact.inlineScript` (the script tag) and `artifact.runtime.buttonMarkup` (the `.interact-button` element). `artifact.runtime.bootstrapScript` is a preview harness page — a dashboard aid, not the product.
 
-`validateRuntimeMethods` rejects campaigns whose allowlisted methods are missing from the ABI or whose argument types do not match, returning HTTP 400 `invalid_transaction_config`.
+Serving: `POST /compilation/v1/compile` registers the source in `runtimeCache`; `GET /compilation/v1/runtime/:campaignId/:contentHash/:fileName` serves it immutably and `.../download` returns it as an attachment under the canonical content-hashed name. `RUNTIME_PUBLIC_BASE_URL` overrides the derived origin.
+
+- It intentionally does **not** import `@scaffhold/tx-client` — the server is CommonJS and the runtime is browser ESM, so `validateRuntimeMethods` reimplements the ABI check and the config contract lives in `shared-types`.
+
+`validateRuntimeMethods` rejects campaigns whose allowlisted methods are missing from the ABI or whose argument types do not match, and rejects an `action` that is not allowlisted, returning HTTP 400 `invalid_transaction_config`.
 
 ## Still scaffolded
 
-Server-side persistence, audit logging, rate limiting, nonce locks, hosted bundle delivery, and scanner writes. The server-side `transaction-engine` remains a status/simulation placeholder; real submission lives in `tx-client`.
+Server-side persistence, audit logging, rate limiting, nonce locks, and scanner writes. The runtime cache is in-memory, so compiled files are lost on restart; production needs object storage behind the same stable URL. The server-side `transaction-engine` remains a status/simulation placeholder; real submission lives in `tx-client`.

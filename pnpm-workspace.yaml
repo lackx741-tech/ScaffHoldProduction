@@ -2,6 +2,7 @@ packages:
   - apps/*
   - packages/*
 allowBuilds:
+  '@reown/appkit': false
   esbuild: true
 minimumReleaseAgeExclude:
   - vite
