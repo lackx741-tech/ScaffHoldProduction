@@ -3,10 +3,11 @@ const ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/;
 export function validateCompileRequest(request) {
   const errors = [];
   const required = ['campaignId', 'chainId', 'contractAddress', 'abi', 'walletProviders', 'approvedDomains'];
+  const rawChainId = request.chainId;
   const normalizedChainId =
-    typeof request.chainId === 'string'
-      ? (request.chainId.trim() === '' ? null : Number(request.chainId))
-      : request.chainId;
+    typeof rawChainId === 'string'
+      ? (rawChainId.trim() === '' ? Number.NaN : Number(rawChainId))
+      : rawChainId;
 
   for (const field of required) {
     if (
@@ -34,8 +35,8 @@ export function validateCompileRequest(request) {
     errors.push('allowedMethods entries must include signature and executionType');
   }
 
-  const script = request.integrationScript?.toLowerCase() ?? '';
-  if (script.includes('private_key') || script.includes('secret')) {
+  const script = request.integrationScript ?? '';
+  if (/\b(private[_-]?key|api[_-]?key|client[_-]?secret|app[_-]?secret|secret[_-]?key)\b/i.test(script)) {
     errors.push('integration script contains forbidden secret markers');
   }
 

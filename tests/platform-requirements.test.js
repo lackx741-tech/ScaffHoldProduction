@@ -92,6 +92,19 @@ test('compile request blocks mixed-case private_key marker', () => {
   assert.ok(result.errors.includes('integration script contains forbidden secret markers'));
 });
 
+test('compile request does not fail on benign words containing "secret"', () => {
+  const result = validateCompileRequest({
+    campaignId: 'c1',
+    chainId: 1,
+    contractAddress: '0x0000000000000000000000000000000000000001',
+    abi: [{}],
+    walletProviders: ['walletconnect'],
+    approvedDomains: ['example.com'],
+    integrationScript: 'const secretary = \"office\";'
+  });
+  assert.equal(result.valid, true);
+});
+
 test('relayer policy enforces consent, allowlist and anti-arbitrary-calldata protections', () => {
   const campaignPolicy = {
     chainId: 1,
@@ -160,6 +173,18 @@ test('event envelope includes required metadata and deterministic idempotency ke
 
   const keyC = idempotencyKeyFromEnvelope({ ...envelope, payload: { status: 'complete' } });
   assert.notEqual(keyA, keyC);
+});
+
+test('event envelope supports eventVersion input field', () => {
+  const envelope = buildEventEnvelope({
+    eventType: 'campaign.created',
+    eventVersion: '2.1',
+    sourceService: 'orchestrator',
+    correlationId: 'corr-version',
+    campaignId: 'campaign-1',
+    payload: {}
+  });
+  assert.equal(envelope.eventVersion, '2.1');
 });
 
 test('idempotency key is stable for semantically equivalent payload key order', () => {
