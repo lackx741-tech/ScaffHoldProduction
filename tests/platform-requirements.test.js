@@ -165,6 +165,25 @@ test('relayer policy accepts numeric-string chainId equivalent to campaign chain
   assert.equal(result.valid, true);
 });
 
+test('relayer policy rejects invalid campaign policy chainId', () => {
+  const result = validateTransactionRequest(
+    {
+      userConsent: true,
+      idempotencyKey: 'idem-1',
+      methodSignature: 'transfer(address,uint256)',
+      rawCalldata: '',
+      preparedByOrchestrator: true,
+      chainId: 1
+    },
+    {
+      chainId: '1.5',
+      allowedMethods: ['transfer(address,uint256)']
+    }
+  );
+  assert.equal(result.valid, false);
+  assert.ok(result.errors.includes('campaign policy chainId is invalid'));
+});
+
 test('event envelope includes required metadata and deterministic idempotency key basis', () => {
   const envelope = buildEventEnvelope({
     eventType: 'campaign.compilation.requested',
@@ -198,6 +217,20 @@ test('event envelope supports eventVersion input field', () => {
     payload: {}
   });
   assert.equal(envelope.eventVersion, '2.1');
+});
+
+test('event envelope rejects blank required metadata fields', () => {
+  assert.throws(
+    () =>
+      buildEventEnvelope({
+        eventType: '   ',
+        sourceService: 'orchestrator',
+        correlationId: 'corr',
+        campaignId: 'campaign-1',
+        payload: {}
+      }),
+    /required/
+  );
 });
 
 test('idempotency key is stable for semantically equivalent payload key order', () => {
@@ -239,5 +272,17 @@ test('idempotency key differs for different users with same event scope', () => 
   };
   const keyA = idempotencyKeyFromEnvelope({ ...base, userId: 'user-1' });
   const keyB = idempotencyKeyFromEnvelope({ ...base, userId: 'user-2' });
+  assert.notEqual(keyA, keyB);
+});
+
+test('idempotency key changes when eventVersion changes', () => {
+  const base = {
+    eventType: 'wallet.connected',
+    correlationId: 'corr-4',
+    campaignId: 'campaign-9',
+    payload: { address: '0xabc' }
+  };
+  const keyA = idempotencyKeyFromEnvelope({ ...base, eventVersion: '1.0' });
+  const keyB = idempotencyKeyFromEnvelope({ ...base, eventVersion: '2.0' });
   assert.notEqual(keyA, keyB);
 });

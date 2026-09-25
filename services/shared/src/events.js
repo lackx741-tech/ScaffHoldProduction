@@ -25,7 +25,8 @@ export function buildEventEnvelope({
   payload,
   retry = { attempt: 0, maxAttempts: 3 }
 }) {
-  if (!eventType || !sourceService || !correlationId || !campaignId) {
+  const isBlank = (value) => typeof value === 'string' && value.trim() === '';
+  if (!eventType || !sourceService || !correlationId || !campaignId || isBlank(eventType) || isBlank(sourceService) || isBlank(correlationId) || isBlank(campaignId)) {
     throw new Error('eventType, sourceService, correlationId and campaignId are required');
   }
 

@@ -20,7 +20,9 @@ export function validateTransactionRequest(request, campaignPolicy) {
     errors.push('arbitrary raw calldata from browser is not accepted');
   }
 
-  if (!Number.isInteger(requestChainId) || requestChainId !== policyChainId) {
+  if (!Number.isInteger(policyChainId) || policyChainId <= 0) {
+    errors.push('campaign policy chainId is invalid');
+  } else if (!Number.isInteger(requestChainId) || requestChainId !== policyChainId) {
     errors.push('chainId does not match campaign policy');
   }
 
