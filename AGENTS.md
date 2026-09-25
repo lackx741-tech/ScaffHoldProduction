@@ -60,6 +60,8 @@ The runtime reads its config from `window.SCAFFHOLD_RUNTIME_CONFIG` (base64 or o
 
 Tests for this package: `tests/tx-client-encoding.test.ts` (keccak/ABI vectors), `tests/tx-client-engine.test.ts` (guardrails + lifecycle), `tests/tx-client-browser.test.ts` (executes the real compiled standalone file in jsdom — run `pnpm --filter @scaffhold/tx-client build` first).
 
+jsdom has no `indexedDB`, which the WalletConnect library needs for session storage, so a WalletConnect-configured campaign cannot be exercised there. Browser tests therefore use `walletProviders: ['injected']` with a stub `window.ethereum`; WalletConnect's own init is covered by `tests/tx-client-walletconnect.test.ts` through the `loadProvider` seam.
+
 ## Compilation service
 
 `apps/compilation-service/src/runtime-bundle.ts` produces the deliverable. `buildProjectRuntime` prepends `window.SCAFFHOLD_RUNTIME_CONFIG={...};` to the built bundle (`loadRuntimeSource` reads `packages/tx-client/dist/scaffhold-tx.min.js` from disk, so `@scaffhold/tx-client` must be built first), hashes it, and returns `artifact.projectRuntime` with `fileName`, `source`, `config`, `integrity`, `sizeBytes`, and a stable `url`.
