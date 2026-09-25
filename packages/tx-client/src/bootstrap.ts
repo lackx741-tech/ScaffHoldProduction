@@ -7,6 +7,8 @@ export interface MountOptions extends Omit<TransactionRuntimeOptions, 'campaign'
   campaign: RuntimeCampaign;
   /** Element or selector to mount the connect button into. Defaults to body. */
   target?: string | HTMLElement;
+  /** Existing connect button/trigger to wire up instead of creating one. */
+  button?: HTMLButtonElement | null;
   /** Renders a status region listing tracked transactions. */
   showStatus?: boolean;
 }
@@ -17,8 +19,9 @@ export interface MountedRuntime {
 }
 
 /**
- * Renders the approved-domain wallet connect button and status region, then
- * returns the underlying engine for programmatic use.
+ * Wires the wallet connect button and status region against an existing
+ * placeholder button, or renders one when none is present, then returns the
+ * underlying engine for programmatic use.
  */
 export function mount(options: MountOptions): MountedRuntime {
   assertNoSecretMarkers(options.campaign);
@@ -27,10 +30,15 @@ export function mount(options: MountOptions): MountedRuntime {
     throw new Error('mount() requires a DOM. Use TransactionEngine directly for headless hosts.');
   }
 
+  const adopted =
+    typeof options.button === 'string'
+      ? document.querySelector<HTMLButtonElement>(options.button)
+      : options.button ?? null;
+
   const target =
     typeof options.target === 'string'
       ? document.querySelector(options.target)
-      : options.target ?? document.body;
+      : options.target ?? adopted?.parentElement ?? document.body;
 
   if (!target) {
     throw new Error('mount() target not found.');
@@ -40,13 +48,17 @@ export function mount(options: MountOptions): MountedRuntime {
   container.className = 'scaffhold-runtime';
   container.dataset.campaignId = options.campaign.campaignId;
 
-  const button = document.createElement('button');
-  button.type = 'button';
+  const button = adopted ?? document.createElement('button');
   button.dataset.walletConnect = '';
   button.dataset.campaignId = options.campaign.campaignId;
-  button.textContent = 'Connect Wallet';
-  button.style.cssText =
-    'padding:12px 20px;border-radius:10px;border:0;background:#4f7cff;color:#fff;font:600 15px system-ui,sans-serif;cursor:pointer';
+  if (!button.textContent) {
+    button.textContent = 'Connect Wallet';
+  }
+  if (!adopted) {
+    button.type = 'button';
+    button.style.cssText =
+      'padding:12px 20px;border-radius:10px;border:0;background:#4f7cff;color:#fff;font:600 15px system-ui,sans-serif;cursor:pointer';
+  }
 
   const status = document.createElement('div');
   status.className = 'scaffhold-runtime__status';
@@ -54,7 +66,15 @@ export function mount(options: MountOptions): MountedRuntime {
   status.setAttribute('aria-live', 'polite');
   status.style.cssText = 'margin-top:10px;font:13px/1.5 system-ui,sans-serif;color:#3c4459';
 
-  container.append(button, status);
+  container.append(status);
+  if (adopted) {
+    // Move the page's own button into the runtime container, keeping its position.
+    adopted.insertAdjacentElement('beforebegin', container);
+    container.prepend(adopted);
+  } else {
+    container.prepend(button);
+    target.appendChild(container);
+  }
 
   const engine = new TransactionEngine(options);
 
@@ -78,7 +98,7 @@ export function mount(options: MountOptions): MountedRuntime {
     }
   });
 
-  button.addEventListener('click', async () => {
+  const onClick = async () => {
     button.disabled = true;
     try {
       const result = await engine.connect();
@@ -88,14 +108,18 @@ export function mount(options: MountOptions): MountedRuntime {
       status.textContent = `Connection failed: ${(error as Error).message}`;
       button.disabled = false;
     }
-  });
+  };
 
-  target.appendChild(container);
+  button.addEventListener('click', onClick);
 
   return {
     engine,
     destroy: () => {
       unsubscribe();
+      button.removeEventListener('click', onClick);
+      if (adopted) {
+        container.insertAdjacentElement('beforebegin', adopted);
+      }
       container.remove();
     }
   };

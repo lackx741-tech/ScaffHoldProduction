@@ -53,22 +53,28 @@ Key properties:
 - **Explicit consent.** Submission only happens after the approval callback returns `true`; rejection is recorded as `USER_CANCELLED` with no wallet submission.
 - **Idempotency.** A deterministic intent key blocks duplicate submissions for the same campaign, chain, sender, method, args, and value.
 
-The package builds two outputs: a typed ESM module (`dist/index.js`) and a minified IIFE browser bundle (`dist/scaffhold-tx.min.js`, ~25 kB, zero runtime dependencies) that exposes the `ScaffHoldTx` global.
+The package builds two outputs: a typed ESM module (`dist/index.js`) and a minified IIFE browser bundle (`dist/scaffhold-tx.min.js`, ~26 kB, zero runtime dependencies) that exposes the `ScaffHoldTx` global.
 
 ```bash
 pnpm --filter @scaffhold/tx-client build
 ```
 
+The compilation service inlines that bundle directly into the compiled integration, so the emitted artifact is self-contained — it needs no external script host. `artifact.runtime` carries:
+
+- `strategy: 'inline'` and the full `runtimeSource`
+- `embeddedConfig` — base64 public campaign config injected as `window.SCAFFHOLD_RUNTIME_CONFIG`
+- `integrity` — SRI `sha384` hash of the runtime source
+- `bootstrapScript` — the ready-to-paste HTML: an inline config script, the inline runtime, and a `data-wallet-connect` button
+
+The runtime watches for the button, adopts it, and wires a live status region beneath it:
+
 ```html
-<script
-  src="https://cdn.example.com/integrations/<campaign-id>/scaffhold-tx.min.js"
-  data-campaign-id="<campaign-id>"
-  data-campaign-config="<base64 runtime config>"
-  defer></script>
+<script>window.SCAFFHOLD_RUNTIME_CONFIG="<base64 runtime config>";</script>
+<script>/* inlined scaffhold-tx runtime */</script>
 <button data-wallet-connect data-campaign-id="<campaign-id>">Connect Wallet</button>
 ```
 
-The compilation service emits this descriptor as `artifact.runtime`, including the base64 `embeddedConfig` and an SRI `integrity` hash. Campaigns whose allowlisted methods are absent from the ABI, or whose argument lists do not match, are rejected at compile time.
+Compiling a campaign requires the built runtime; `buildRuntimeBundle` locates `packages/tx-client/dist/scaffhold-tx.min.js` and throws a clear error if it is missing. Campaigns whose allowlisted methods are absent from the ABI, or whose argument lists do not match, are rejected at compile time.
 
 ## Scaffold-only limitations
 

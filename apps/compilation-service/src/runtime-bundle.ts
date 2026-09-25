@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import type { CampaignConfig, RuntimeBundle, RuntimeConfig } from '@scaffhold/shared-types';
 
 const RUNTIME_VERSION = 'tx-client-0.1.0';
-const CDN_BASE = 'https://cdn.example.com/integrations';
+const RUNTIME_BUNDLE_RELATIVE = 'packages/tx-client/dist/scaffhold-tx.min.js';
 
 export function buildRuntimeConfig(campaign: CampaignConfig): RuntimeConfig {
   return {
@@ -27,22 +29,58 @@ export function buildRuntimeConfig(campaign: CampaignConfig): RuntimeConfig {
 }
 
 /**
- * Emits the client-side runtime bundle descriptor. The browser bundle carries
- * public config only; signing always happens inside the end user's wallet, so
- * no key material is ever embedded here.
+ * Locates the built browser runtime. Resolved by walking up from the service's
+ * own directory (CommonJS build) and from the working directory (ESM hosts such
+ * as the test runner), so it works regardless of how the service is launched.
+ */
+export function loadRuntimeSource(): string {
+  const starts: string[] = [];
+  try {
+    starts.push(__dirname);
+  } catch {
+    // ESM host: __dirname is not defined.
+  }
+  starts.push(process.cwd());
+
+  for (const start of starts) {
+    let dir = start;
+    for (let depth = 0; depth < 8; depth += 1) {
+      const candidate = join(dir, RUNTIME_BUNDLE_RELATIVE);
+      if (existsSync(candidate)) {
+        return readFileSync(candidate, 'utf8');
+      }
+      const parent = dirname(dir);
+      if (parent === dir) {
+        break;
+      }
+      dir = parent;
+    }
+  }
+
+  throw new Error(
+    `Unable to locate the built client runtime at "${RUNTIME_BUNDLE_RELATIVE}". Run "pnpm --filter @scaffhold/tx-client build" before compiling campaigns.`
+  );
+}
+
+/**
+ * Emits the self-contained runtime descriptor. The browser runtime is inlined
+ * directly into the compiled output alongside the encoded public config and the
+ * wallet connect button, so the artifact needs no external script host. Signing
+ * always happens inside the end user's wallet; no key material is embedded.
  */
 export function buildRuntimeBundle(campaign: CampaignConfig): RuntimeBundle {
   const runtimeConfig = buildRuntimeConfig(campaign);
-  const entrypoint = `${CDN_BASE}/${encodeURIComponent(campaign.campaignId)}/scaffhold-tx.min.js`;
   const embeddedConfig = Buffer.from(JSON.stringify(runtimeConfig), 'utf8').toString('base64');
+  const runtimeSource = loadRuntimeSource();
+  const integrity = `sha384-${createHash('sha384').update(runtimeSource).digest('base64')}`;
 
   const bootstrapScript = [
-    '<script',
-    `  src="${entrypoint}"`,
-    `  data-campaign-id="${escapeHtmlAttribute(campaign.campaignId)}"`,
-    `  data-campaign-config="${embeddedConfig}"`,
-    `  data-environment="${escapeHtmlAttribute(campaign.environment)}"`,
-    '  defer>',
+    '<script>',
+    `window.SCAFFHOLD_RUNTIME_CONFIG=${JSON.stringify(embeddedConfig)};`,
+    '</script>',
+    '<script>',
+    `/* ${RUNTIME_VERSION} (inlined) */`,
+    escapeInlineScript(runtimeSource),
     '</script>',
     `<button data-wallet-connect data-campaign-id="${escapeHtmlAttribute(campaign.campaignId)}">`,
     '  Connect Wallet',
@@ -51,9 +89,11 @@ export function buildRuntimeBundle(campaign: CampaignConfig): RuntimeBundle {
 
   return {
     runtimeVersion: RUNTIME_VERSION,
-    entrypoint,
+    strategy: 'inline',
     embeddedConfig,
-    integrity: `sha384-${createHash('sha384').update(embeddedConfig).digest('base64')}`,
+    integrity,
+    runtimeSource,
+    sizeBytes: Buffer.byteLength(runtimeSource, 'utf8'),
     bootstrapScript
   };
 }
@@ -118,6 +158,11 @@ function canonicalType(type: string): string {
   if (type === 'uint') return 'uint256';
   if (type === 'int') return 'int256';
   return type;
+}
+
+/** Prevents an inlined bundle from breaking out of its script element. */
+function escapeInlineScript(source: string): string {
+  return source.replaceAll('</script', '<\\/script');
 }
 
 function escapeHtmlAttribute(value: string): string {

@@ -54,11 +54,20 @@ Two build outputs: typed ESM (`dist/index.js`) and a minified IIFE bundle (`dist
 pnpm --filter @scaffhold/tx-client build
 ```
 
-Tests for this package: `tests/tx-client-encoding.test.ts` (keccak/ABI vectors), `tests/tx-client-engine.test.ts` (guardrails + lifecycle), `tests/tx-client-browser.test.ts` (executes the real built IIFE in jsdom — run `pnpm --filter @scaffhold/tx-client build` first).
+The runtime reads its config from `window.SCAFFHOLD_RUNTIME_CONFIG` (base64), falling back to `data-campaign-config` on its own script tag. `mount()` adopts an existing `[data-wallet-connect]` button when present, otherwise creates one.
+
+Tests for this package: `tests/tx-client-encoding.test.ts` (keccak/ABI vectors), `tests/tx-client-engine.test.ts` (guardrails + lifecycle), `tests/tx-client-browser.test.ts` (executes the real compiled inline output in jsdom — run `pnpm --filter @scaffhold/tx-client build` first).
 
 ## Compilation service
 
-`apps/compilation-service/src/runtime-bundle.ts` builds the `artifact.runtime` descriptor: base64 `embeddedConfig`, `entrypoint`, SRI `integrity`, and the bootstrap HTML. `validateRuntimeMethods` rejects campaigns whose allowlisted methods are missing from the ABI or whose argument types do not match, returning HTTP 400 `invalid_transaction_config`. It intentionally does **not** import `@scaffhold/tx-client` — the server is CommonJS and the runtime is browser ESM, so the config contract is duplicated in `shared-types`.
+`apps/compilation-service/src/runtime-bundle.ts` builds the `artifact.runtime` descriptor. The runtime is **inlined** into the compiled output (`strategy: 'inline'`): `buildRuntimeBundle` reads `packages/tx-client/dist/scaffhold-tx.min.js` from disk via `loadRuntimeSource`, so `@scaffhold/tx-client` must be built before campaigns are compiled. `bootstrapScript` is the complete self-contained HTML (inline config script + inline runtime + connect button) and is also emitted as `artifact.inlineScript`.
+
+- `integrity` is the SRI `sha384` of the runtime source.
+- `embeddedConfig` is base64 public config — no secrets, ever.
+- `escapeInlineScript` rewrites `</script` so an inlined bundle cannot break out of its script element.
+- It intentionally does **not** import `@scaffhold/tx-client` — the server is CommonJS and the runtime is browser ESM, so the config contract is duplicated in `shared-types`.
+
+`validateRuntimeMethods` rejects campaigns whose allowlisted methods are missing from the ABI or whose argument types do not match, returning HTTP 400 `invalid_transaction_config`.
 
 ## Still scaffolded
 

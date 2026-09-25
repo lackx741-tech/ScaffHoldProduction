@@ -5,6 +5,8 @@ import type { Eip1193Provider, RuntimeCampaign } from './types.js';
 declare global {
   interface Window {
     ethereum?: Eip1193Provider;
+    /** Injected by the compilation service when the runtime is inlined. */
+    SCAFFHOLD_RUNTIME_CONFIG?: string | RuntimeCampaign;
     ScaffHoldTx?: {
       mount: (options: MountOptions) => MountedRuntime;
       TransactionEngine: typeof TransactionEngine;
@@ -14,18 +16,33 @@ declare global {
 }
 
 /**
- * Reads the campaign config embedded by the compilation service and mounts the
- * runtime against the injected wallet provider. Public config only: no secrets.
+ * Reads the campaign config that the compilation service inlined ahead of the
+ * runtime. When the runtime is loaded from an external script tag instead, the
+ * config is read from that tag's data-campaign-config attribute.
  */
 function readEmbeddedCampaign(): RuntimeCampaign | undefined {
+  const injected = typeof window !== 'undefined' ? window.SCAFFHOLD_RUNTIME_CONFIG : undefined;
+  if (injected) {
+    if (typeof injected === 'object') {
+      return injected;
+    }
+    const decoded = decodeCampaignConfig(injected);
+    if (decoded) {
+      return decoded;
+    }
+  }
+
   const script = document.currentScript as HTMLScriptElement | null;
   const encoded = script?.dataset?.['campaignConfig'];
   if (!encoded) {
     return undefined;
   }
+  return decodeCampaignConfig(encoded);
+}
+
+function decodeCampaignConfig(encoded: string): RuntimeCampaign | undefined {
   try {
-    const json = atob(encoded);
-    return JSON.parse(json) as RuntimeCampaign;
+    return JSON.parse(atob(encoded)) as RuntimeCampaign;
   } catch (error) {
     console.error('[scaffhold-tx] Failed to parse embedded campaign config.', error);
     return undefined;
@@ -43,9 +60,8 @@ function autoMount(): MountedRuntime | undefined {
     return undefined;
   }
 
-  const buttons = document.querySelectorAll<HTMLElement>('[data-wallet-connect]');
-  const target = buttons[0]?.parentElement ?? document.body;
-  return mount({ campaign, provider, target });
+  const button = document.querySelector<HTMLButtonElement>('[data-wallet-connect]');
+  return mount({ campaign, provider, button, target: button?.parentElement ?? document.body });
 }
 
 if (typeof document !== 'undefined') {

@@ -41,7 +41,7 @@ describe('compilation scaffold', () => {
     expect(first).toEqual(second);
     expect(first.version).toMatch(/^v1-/);
     expect(first.inlineScript).toContain(sampleCampaign.campaignId);
-    expect(first.inlineScript).toContain(`data-version="${first.version}"`);
+    expect(first.inlineScript).toContain('data-wallet-connect');
   });
 
   it('validates and returns a placeholder compilation response', async () => {
@@ -57,13 +57,22 @@ describe('compilation scaffold', () => {
     expect(response.body.artifact.bundleHash).toMatch(/^[a-f0-9]{64}$/);
     expect(response.body.artifact.approvedDomains).toEqual(sampleCampaign.domains);
     expect(response.body.artifact.runtime.runtimeVersion).toMatch(/^tx-client-/);
-    expect(response.body.artifact.runtime.entrypoint).toContain('scaffhold-tx.min.js');
+    expect(response.body.artifact.runtime.strategy).toBe('inline');
     expect(response.body.artifact.runtime.integrity).toMatch(/^sha384-/);
+    expect(response.body.artifact.runtime.sizeBytes).toBeGreaterThan(0);
+    expect(response.body.artifact.runtime.runtimeSource).toContain('ScaffHoldTx');
+    expect(response.body.artifact.runtime.bootstrapScript).toContain('SCAFFHOLD_RUNTIME_CONFIG');
     expect(response.body.artifact.runtime.bootstrapScript).toContain('data-wallet-connect');
+    expect(response.body.artifact.runtime.bootstrapScript).not.toMatch(/<script[^>]*\ssrc=/);
+    expect(response.body.artifact.inlineScript).toBe(response.body.artifact.runtime.bootstrapScript);
     const decoded = JSON.parse(Buffer.from(response.body.artifact.runtime.embeddedConfig, 'base64').toString('utf8'));
     expect(decoded.transactionPolicy.signingMode).toBe('client-wallet');
     expect(decoded.contract.allowedMethods).toEqual(['mint(uint256)']);
     expect(JSON.stringify(decoded)).not.toMatch(/private[_-]?key|relayer[_-]?(secret|key)/i);
+    // The inlined runtime ships the secret-detection guardrail, not any secret value.
+    expect(response.body.artifact.runtime.runtimeSource).toContain('secret_material_detected');
+    expect(decoded).not.toHaveProperty('privateKey');
+    expect(decoded).not.toHaveProperty('relayerSecret');
   });
 
   it('reports the client runtime as the submission authority without enabling server signing', async () => {

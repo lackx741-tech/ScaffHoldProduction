@@ -2,14 +2,11 @@
  * @vitest-environment jsdom
  * @vitest-environment-options {"url":"https://app.example.com/"}
  */
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { beforeAll, describe, expect, it } from 'vitest';
-import type { RuntimeCampaign } from '../packages/tx-client/src/index';
+import { describe, expect, it } from 'vitest';
+import { buildPlaceholderArtifact } from '../apps/compilation-service/src/compiler';
+import type { CampaignConfig } from '../packages/shared-types/src/index';
 
-const BUNDLE_PATH = resolve(process.cwd(), 'packages/tx-client/dist/scaffhold-tx.min.js');
-
-const campaign: RuntimeCampaign = {
+const campaign: CampaignConfig = {
   campaignId: 'cmp_launch_alpha',
   name: 'Launch Alpha',
   environment: 'development',
@@ -19,27 +16,16 @@ const campaign: RuntimeCampaign = {
     abi: [{ name: 'mint', type: 'function', inputs: [{ name: 'amount', type: 'uint256' }] }],
     allowedMethods: ['mint(uint256)']
   },
-  approvedDomains: ['app.example.com'],
+  domains: ['app.example.com'],
   walletProviders: ['injected'],
+  modal: { title: 'Connect', theme: 'dark' },
   transactionPolicy: { userConsentRequired: true, relayerEnabled: false, signingMode: 'client-wallet' }
 };
 
 const FROM = '0x2222222222222222222222222222222222222222';
-const TX_HASH = '0xfeed000000000000000000000000000000000000000000000000000000000001';
-
-interface MountedRuntimeLike {
-  engine: { connect: () => Promise<{ address: string }> };
-  destroy: () => void;
-}
 
 interface ScaffoldGlobal {
-  mount: (options: Record<string, unknown>) => MountedRuntimeLike;
-  TransactionEngine: new (options: Record<string, unknown>) => unknown;
-  autoMount: () => MountedRuntimeLike | undefined;
-}
-
-function api(): ScaffoldGlobal {
-  return (window as unknown as { ScaffHoldTx: ScaffoldGlobal }).ScaffHoldTx;
+  autoMount: () => { engine: { connect: () => Promise<{ address: string }> }; destroy: () => void } | undefined;
 }
 
 function createProvider() {
@@ -51,12 +37,6 @@ function createProvider() {
           return [FROM];
         case 'eth_chainId':
           return '0x1';
-        case 'eth_estimateGas':
-          return '0x5208';
-        case 'eth_call':
-          return '0x';
-        case 'eth_sendTransaction':
-          return TX_HASH;
         default:
           throw new Error(`Unhandled method ${method}`);
       }
@@ -64,66 +44,52 @@ function createProvider() {
   };
 }
 
-describe('built browser bundle', () => {
-  beforeAll(() => {
-    const source = readFileSync(BUNDLE_PATH, 'utf8');
-    // Executes the real minified IIFE artifact against the jsdom global scope.
-    new Function('window', 'document', 'location', source)(window, document, window.location);
-  });
+/** Runs the inline script bodies from the compiled artifact in document order. */
+function executeInlineScripts(html: string): void {
+  const bodies = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((match) => match[1] ?? '');
+  expect(bodies.length).toBeGreaterThan(0);
+  for (const body of bodies) {
+    new Function('window', 'document', 'location', body)(window, document, window.location);
+  }
+}
 
-  it('registers the global namespace', () => {
-    expect(typeof api().mount).toBe('function');
-    expect(typeof api().TransactionEngine).toBe('function');
-    expect(typeof api().autoMount).toBe('function');
-  });
+describe('compiled inline runtime output', () => {
+  it('inlines the runtime and wires the campaign connect button with no external script host', async () => {
+    const artifact = buildPlaceholderArtifact(campaign);
+    expect(artifact.runtime).toBeDefined();
+    const runtime = artifact.runtime!;
+    const bootstrapScript = runtime.bootstrapScript;
 
-  it('autoMount reads the embedded base64 campaign config and renders a connect button', () => {
-    const embedded = Buffer.from(JSON.stringify(campaign), 'utf8').toString('base64');
-    const script = document.createElement('script');
-    script.setAttribute('data-campaign-config', embedded);
-    document.body.appendChild(script);
-    Object.defineProperty(document, 'currentScript', { value: script, configurable: true });
+    expect(runtime.strategy).toBe('inline');
+    expect(bootstrapScript).not.toMatch(/<script[^>]*\ssrc=/);
+    expect(bootstrapScript).toContain('data-wallet-connect');
 
-    const host = document.createElement('div');
-    host.innerHTML = '<button data-wallet-connect data-campaign-id="cmp_launch_alpha"></button>';
-    document.body.appendChild(host);
+    document.body.innerHTML = bootstrapScript.replace(/<script>[\s\S]*?<\/script>/g, '');
     (window as unknown as { ethereum?: unknown }).ethereum = createProvider();
 
-    const mounted = api().autoMount();
-    expect(mounted).toBeDefined();
+    executeInlineScripts(bootstrapScript);
 
-    const rendered = document.querySelector('.scaffhold-runtime button[data-wallet-connect]');
-    expect(rendered?.textContent).toContain('Connect Wallet');
-    expect(rendered?.getAttribute('data-campaign-id')).toBe('cmp_launch_alpha');
+    const api = (window as unknown as { ScaffHoldTx?: ScaffoldGlobal }).ScaffHoldTx;
+    expect(api?.autoMount).toBeTypeOf('function');
 
-    mounted!.destroy();
-    host.remove();
-    delete (document as unknown as { currentScript?: unknown }).currentScript;
+    // The compiled output ships its own connect button; autoMount adopts it.
+    const button = document.querySelector<HTMLButtonElement>('.scaffhold-runtime button[data-wallet-connect]');
+    expect(button).not.toBeNull();
+    expect(button!.dataset.campaignId).toBe(campaign.campaignId);
+
+    button!.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const status = document.querySelector('.scaffhold-runtime__status');
+    expect(status?.textContent).toContain('Connected on chain 1');
   });
 
-  it('mount returns a live engine and enforces the domain allowlist', async () => {
-    const mounted = api().mount({
-      campaign,
-      hostname: 'app.example.com',
-      provider: createProvider(),
-      requestApproval: async () => true,
-      showStatus: true
-    });
+  it('mounts without a provider warning when no EIP-1193 wallet is present', () => {
+    const artifact = buildPlaceholderArtifact(campaign);
+    document.body.innerHTML = artifact.runtime.bootstrapScript.replace(/<script>[\s\S]*?<\/script>/g, '');
+    delete (window as unknown as { ethereum?: unknown }).ethereum;
 
-    const connected = await mounted.engine.connect();
-    expect(connected.address).toBe(FROM);
-
-    const Engine = api().TransactionEngine;
-    expect(() =>
-      new Engine({
-        campaign,
-        hostname: 'attacker.net',
-        provider: createProvider(),
-        requestApproval: async () => true
-      })
-    ).toThrow(/not in the campaign allowlist/);
-
-    mounted.destroy();
-    expect(mounted.engine).toBeDefined();
+    executeInlineScripts(artifact.runtime.bootstrapScript);
+    expect((window as unknown as { ScaffHoldTx: ScaffoldGlobal }).ScaffHoldTx.autoMount()).toBeUndefined();
   });
 });

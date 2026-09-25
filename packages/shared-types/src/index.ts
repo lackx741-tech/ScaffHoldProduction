@@ -76,10 +76,15 @@ export type RuntimeConfig = z.infer<typeof runtimeConfigSchema>;
 
 export const runtimeBundleSchema = z.object({
   runtimeVersion: z.string().min(1),
-  entrypoint: z.string().min(1),
-  /** Base64-encoded runtime config for the script's data-campaign-config attribute. */
+  /** How the runtime reaches the host page. Currently always inlined. */
+  strategy: z.enum(['inline', 'external']),
+  /** Base64-encoded runtime config injected into the host page. */
   embeddedConfig: z.string().min(1),
+  /** SRI hash of the runtime source. */
   integrity: z.string().min(1),
+  /** The packaged client runtime, inlined when strategy is "inline". */
+  runtimeSource: z.string().min(1),
+  sizeBytes: z.number().int().positive(),
   bootstrapScript: z.string().min(1)
 });
 
