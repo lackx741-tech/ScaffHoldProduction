@@ -12,6 +12,19 @@ test('compile request validation enforces required fields and address format', (
   assert.ok(invalid.errors.includes('abi is required'));
 });
 
+test('compile request treats blank campaignId as missing', () => {
+  const invalid = validateCompileRequest({
+    campaignId: '   ',
+    chainId: 1,
+    contractAddress: '0x0000000000000000000000000000000000000001',
+    abi: [],
+    walletProviders: ['walletconnect'],
+    approvedDomains: ['example.com']
+  });
+  assert.equal(invalid.valid, false);
+  assert.ok(invalid.errors.includes('campaignId is required'));
+});
+
 test('compile request blocks obvious secret markers in generated script', () => {
   const result = validateCompileRequest({
     campaignId: 'c1',
@@ -89,4 +102,33 @@ test('event envelope includes required metadata and deterministic idempotency ke
 
   const keyC = idempotencyKeyFromEnvelope({ ...envelope, payload: { status: 'complete' } });
   assert.notEqual(keyA, keyC);
+});
+
+test('idempotency key is stable for semantically equivalent payload key order', () => {
+  const base = {
+    eventType: 'transaction.requested',
+    eventVersion: '1.0',
+    correlationId: 'corr-2',
+    campaignId: 'campaign-9'
+  };
+
+  const keyA = idempotencyKeyFromEnvelope({
+    ...base,
+    payload: {
+      b: 2,
+      a: 1,
+      nested: { y: 2, x: 1 }
+    }
+  });
+
+  const keyB = idempotencyKeyFromEnvelope({
+    ...base,
+    payload: {
+      a: 1,
+      nested: { x: 1, y: 2 },
+      b: 2
+    }
+  });
+
+  assert.equal(keyA, keyB);
 });

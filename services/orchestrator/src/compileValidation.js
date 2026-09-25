@@ -5,7 +5,11 @@ export function validateCompileRequest(request) {
   const required = ['campaignId', 'chainId', 'contractAddress', 'abi', 'walletProviders', 'approvedDomains'];
 
   for (const field of required) {
-    if (request[field] == null || (Array.isArray(request[field]) && request[field].length === 0)) {
+    if (
+      request[field] == null ||
+      (typeof request[field] === 'string' && request[field].trim() === '') ||
+      (Array.isArray(request[field]) && request[field].length === 0)
+    ) {
       errors.push(`${field} is required`);
     }
   }

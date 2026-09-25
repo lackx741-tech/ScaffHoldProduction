@@ -1,5 +1,20 @@
 import crypto from 'node:crypto';
 
+function normalize(value) {
+  if (Array.isArray(value)) {
+    return value.map(normalize);
+  }
+  if (value && typeof value === 'object') {
+    return Object.keys(value)
+      .sort()
+      .reduce((acc, key) => {
+        acc[key] = normalize(value[key]);
+        return acc;
+      }, {});
+  }
+  return value;
+}
+
 export function buildEventEnvelope({
   eventType,
   version = '1.0',
@@ -29,7 +44,7 @@ export function buildEventEnvelope({
 }
 
 export function idempotencyKeyFromEnvelope(envelope) {
-  const payloadBasis = JSON.stringify(envelope.payload ?? {});
+  const payloadBasis = JSON.stringify(normalize(envelope.payload ?? {}));
   const basis = `${envelope.eventType}:${envelope.eventVersion}:${envelope.correlationId}:${envelope.campaignId}:${payloadBasis}`;
   return crypto.createHash('sha256').update(basis).digest('hex');
 }
