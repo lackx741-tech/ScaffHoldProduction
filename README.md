@@ -1,4 +1,4 @@
-# ScaffHoldProduction
+# ScaffoldHoldProduction
 
 Minimal distributed Web3 campaign compilation scaffold with explicit service boundaries:
 

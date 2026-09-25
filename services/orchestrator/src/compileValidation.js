@@ -3,6 +3,10 @@ const ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/;
 export function validateCompileRequest(request) {
   const errors = [];
   const required = ['campaignId', 'chainId', 'contractAddress', 'abi', 'walletProviders', 'approvedDomains'];
+  const normalizedChainId =
+    typeof request.chainId === 'string'
+      ? (request.chainId.trim() === '' ? null : Number(request.chainId))
+      : request.chainId;
 
   for (const field of required) {
     if (
@@ -14,7 +18,7 @@ export function validateCompileRequest(request) {
     }
   }
 
-  if (request.chainId != null && (!Number.isInteger(request.chainId) || request.chainId <= 0)) {
+  if (normalizedChainId != null && (!Number.isInteger(normalizedChainId) || normalizedChainId <= 0)) {
     errors.push('chainId must be a positive integer');
   }
 

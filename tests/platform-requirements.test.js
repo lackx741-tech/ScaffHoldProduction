@@ -25,6 +25,29 @@ test('compile request treats blank campaignId as missing', () => {
   assert.ok(invalid.errors.includes('campaignId is required'));
 });
 
+test('compile request accepts numeric-string chainId and rejects non-numeric', () => {
+  const valid = validateCompileRequest({
+    campaignId: 'c1',
+    chainId: '1',
+    contractAddress: '0x0000000000000000000000000000000000000001',
+    abi: [{}],
+    walletProviders: ['walletconnect'],
+    approvedDomains: ['example.com']
+  });
+  assert.equal(valid.valid, true);
+
+  const invalid = validateCompileRequest({
+    campaignId: 'c1',
+    chainId: 'abc',
+    contractAddress: '0x0000000000000000000000000000000000000001',
+    abi: [],
+    walletProviders: ['walletconnect'],
+    approvedDomains: ['example.com']
+  });
+  assert.equal(invalid.valid, false);
+  assert.ok(invalid.errors.includes('chainId must be a positive integer'));
+});
+
 test('compile request blocks obvious secret markers in generated script', () => {
   const result = validateCompileRequest({
     campaignId: 'c1',
@@ -131,4 +154,17 @@ test('idempotency key is stable for semantically equivalent payload key order', 
   });
 
   assert.equal(keyA, keyB);
+});
+
+test('idempotency key differs for different users with same event scope', () => {
+  const base = {
+    eventType: 'wallet.connected',
+    eventVersion: '1.0',
+    correlationId: 'corr-3',
+    campaignId: 'campaign-9',
+    payload: { address: '0xabc' }
+  };
+  const keyA = idempotencyKeyFromEnvelope({ ...base, userId: 'user-1' });
+  const keyB = idempotencyKeyFromEnvelope({ ...base, userId: 'user-2' });
+  assert.notEqual(keyA, keyB);
 });
