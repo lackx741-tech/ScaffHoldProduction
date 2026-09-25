@@ -36,7 +36,7 @@ export function validateCompileRequest(request) {
   }
 
   const script = request.integrationScript ?? '';
-  if (/\b(private[_-]?key|api[_-]?key|client[_-]?secret|app[_-]?secret|secret[_-]?key)\b/i.test(script)) {
+  if (/\b(secret|private[_-]?key|api[_-]?key|client[_-]?secret|app[_-]?secret|secret[_-]?key)\b/i.test(script)) {
     errors.push('integration script contains forbidden secret markers');
   }
 

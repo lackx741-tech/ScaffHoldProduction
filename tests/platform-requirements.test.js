@@ -73,7 +73,20 @@ test('compile request blocks generic SECRET markers in generated script', () => 
     approvedDomains: ['example.com'],
     integrationScript: 'const APP_SECRET = \"x\";'
   });
+  assert.equal(result.valid, false);
+  assert.ok(result.errors.includes('integration script contains forbidden secret markers'));
+});
 
+test('compile request blocks bare SECRET token in generated script', () => {
+  const result = validateCompileRequest({
+    campaignId: 'c1',
+    chainId: 1,
+    contractAddress: '0x0000000000000000000000000000000000000001',
+    abi: [],
+    walletProviders: ['walletconnect'],
+    approvedDomains: ['example.com'],
+    integrationScript: 'const SECRET = \"x\";'
+  });
   assert.equal(result.valid, false);
   assert.ok(result.errors.includes('integration script contains forbidden secret markers'));
 });

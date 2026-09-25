@@ -18,7 +18,6 @@ function normalize(value) {
 export function buildEventEnvelope({
   eventType,
   eventVersion = '1.0',
-  version,
   sourceService,
   correlationId,
   campaignId,
@@ -33,7 +32,7 @@ export function buildEventEnvelope({
   return {
     eventId: crypto.randomUUID(),
     eventType,
-    eventVersion: version ?? eventVersion,
+    eventVersion,
     timestamp: new Date().toISOString(),
     sourceService,
     correlationId,
