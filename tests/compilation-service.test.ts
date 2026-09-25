@@ -50,7 +50,10 @@ describe('compilation scaffold', () => {
 
     expect(response.status).toBe(202);
     expect(response.body.status).toBe('compiled-placeholder');
+    expect(response.body.eventChannel).toBe('events:campaign.compilation');
     expect(response.body.artifact.campaignId).toBe(sampleCampaign.campaignId);
+    expect(response.body.artifact.bundleHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(response.body.artifact.approvedDomains).toEqual(sampleCampaign.domains);
   });
 
   it('rejects invalid campaign payloads', async () => {

@@ -76,6 +76,8 @@ Before production use, add and verify:
    pnpm install
    ```
 
+   Use Node.js 22.12+ to match the workspace toolchain requirements.
+
 4. Start the workspace in development mode:
 
    ```bash

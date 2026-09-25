@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS integrations (
   id TEXT PRIMARY KEY,
   campaign_id TEXT NOT NULL REFERENCES campaigns(id),
   version TEXT NOT NULL,
+  public_key TEXT NOT NULL,
   bundle_hash TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'compiled',
   compiled_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

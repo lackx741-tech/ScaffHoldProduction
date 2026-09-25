@@ -17,7 +17,15 @@ function parsePort(value: string | undefined, fallback: number): number {
 }
 
 function redactConnectionString(value: string): string {
-  return value.replace(/:\/\/([^:]+):([^@]+)@/, '://$1:****@');
+  try {
+    const parsed = new URL(value);
+    if (parsed.password) {
+      parsed.password = '****';
+    }
+    return parsed.toString();
+  } catch {
+    return 'invalid-connection-string';
+  }
 }
 
 export function loadServiceConfig(
