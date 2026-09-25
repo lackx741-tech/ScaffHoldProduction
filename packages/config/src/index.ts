@@ -8,7 +8,7 @@ export interface ServiceConfig {
   logLevel: string;
 }
 
-const DEFAULT_POSTGRES_URL = '******localhost:5432/scaffhold';
+const DEFAULT_POSTGRES_URL = 'postgresql://postgres:postgres@localhost:5432/scaffhold';
 const DEFAULT_REDIS_URL = 'redis://localhost:6379';
 
 function parsePort(value: string | undefined, fallback: number): number {
