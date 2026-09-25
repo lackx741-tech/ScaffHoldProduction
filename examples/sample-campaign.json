@@ -1,0 +1,35 @@
+{
+  "campaign": {
+    "campaignId": "cmp_launch_alpha",
+    "name": "Launch Alpha",
+    "environment": "development",
+    "chainId": 1,
+    "contract": {
+      "address": "0x1111111111111111111111111111111111111111",
+      "abi": [
+        {
+          "name": "mint",
+          "type": "function",
+          "inputs": [
+            {
+              "name": "amount",
+              "type": "uint256"
+            }
+          ]
+        }
+      ],
+      "allowedMethods": ["mint(uint256)"]
+    },
+    "domains": ["app.example.com"],
+    "walletProviders": ["reown", "rainbowkit"],
+    "modal": {
+      "title": "Connect wallet to mint",
+      "theme": "dark"
+    },
+    "transactionPolicy": {
+      "userConsentRequired": true,
+      "relayerEnabled": false,
+      "signingMode": "disabled"
+    }
+  }
+}
