@@ -123,13 +123,13 @@ The platform must allow an administrator to:
 7. Administrator previews the modal.
 8. Administrator compiles the configuration.
 9. System generates an integration bundle.
-10. Administrator receives an inline script and integration instructions.
+10. Administrator receives the standalone runtime file and integration instructions.
 
 ## 3.2 End-User Wallet Connection
 
 1. End user visits an approved domain.
-2. The embedded script initializes.
-3. The wallet connection button is rendered.
+2. The standalone runtime script initializes.
+3. Every `.interact-button` on the page is bound as a trigger.
 4. The end user clicks the button.
 5. The configured wallet provider opens.
 6. The end user selects and connects a wallet.
@@ -216,7 +216,7 @@ The transaction engine configuration should include:
 - Transaction simulation settings
 - Failure and rollback handling
 
-Sensitive credentials must never be stored in frontend code or generated inline scripts.
+Sensitive credentials must never be stored in frontend code or the generated runtime file.
 
 ### D. Wallet Provider Selection
 
@@ -339,7 +339,7 @@ When the administrator clicks **Compile**, the system must:
 8. Check for missing security disclosures.
 9. Create an immutable configuration version.
 10. Generate a bundle.
-11. Generate an inline script.
+11. Generate the standalone project-runtime.min.js file.
 12. Generate an integration manifest.
 13. Generate a version identifier.
 14. Store the compiled artifact.
@@ -350,14 +350,15 @@ When the administrator clicks **Compile**, the system must:
 The compilation service should generate:
 
 ```text
-dist/
-├── integration.js
-├── integration.min.js
-├── integration.css
-├── manifest.json
-├── integrity.json
-└── README.md
+project-runtime.min.js
 ```
+
+A single standalone JavaScript file. The host page loads it with a script tag, and every
+element carrying the `interact-button` class becomes a wallet-connect trigger. Nothing else
+needs to be deployed: no dashboard code, no CSS, and no separate manifest at runtime.
+
+The compilation service also returns `manifest.json` and `integrity.json` metadata for the
+panel and for supply-chain verification.
 
 The generated output should include:
 
@@ -372,7 +373,7 @@ The generated output should include:
 - Subresource Integrity hash
 - Expiration or revocation metadata
 
-The inline script should contain public configuration only.
+The compiled runtime file should contain public configuration only.
 
 It must not contain:
 

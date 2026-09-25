@@ -228,7 +228,7 @@ The service validates the campaign config and returns a deterministic placeholde
 
 - versioned artifact metadata
 - public integration key placeholder
-- inline bootstrap snippet
+- standalone `project-runtime.min.js` and its copy-paste script tag
 - expected dist file list
 
 ## Event contracts
